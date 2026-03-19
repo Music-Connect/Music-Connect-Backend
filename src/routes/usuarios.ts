@@ -1,54 +1,66 @@
-import { Router } from "express";
-import {
-  login,
-  register,
-  forgotPassword,
-  resetPassword,
-  verifyEmail,
-  resendVerification,
-  getAllUsuarios,
-  getUsuarioById,
-  getCurrentUser,
-  updateUsuario,
-  deleteUsuario,
-} from "../controllers/usuariosController.js";
-import { authMiddleware } from "../middleware/auth.js";
+import { FastifyInstance } from "fastify";
+import { prisma } from "../lib/prisma.js";
+import { authenticate } from "../middleware/auth.js";
+import { updateUsuarioSchema } from "../lib/schemas.js";
 
-const router = Router();
+export async function usuariosRoutes(app: FastifyInstance) {
+  // GET /api/usuarios/me
+  app.get("/me", { preHandler: authenticate }, async (req, reply) => {
+    const user = await prisma.usuario.findUnique({
+      where: { id_usuario: req.user!.id_usuario },
+    });
 
-// Auth routes (públicas)
-router.post("/auth/login", login);
-router.post("/auth/register", register);
-router.post("/auth/forgot-password", forgotPassword);
-router.post("/auth/reset-password", resetPassword);
-router.post("/auth/verify-email", verifyEmail);
-router.post("/auth/resend-verification", resendVerification);
-router.post("/auth/logout", (req, res) => {
-  // Limpa cookie httpOnly
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    if (!user) return reply.status(404).send({ success: false, error: "Usuário não encontrado" });
+
+    const { senha, ...userSemSenha } = user;
+    return reply.send({ success: true, data: userSemSenha });
   });
 
-  // Em produção, você poderia adicionar o JWT a uma blacklist
-  // Por enquanto, apenas removemos o cookie do servidor
-  // O cliente é responsável por limpar o token do localStorage/AsyncStorage
+  // GET /api/usuarios/:id
+  app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
 
-  res.json({
-    success: true,
-    message: "Logout realizado com sucesso",
-    timestamp: new Date().toISOString(),
+    const user = await prisma.usuario.findUnique({ where: { id_usuario: id } });
+    if (!user) return reply.status(404).send({ success: false, error: "Usuário não encontrado" });
+
+    const { senha, ...userSemSenha } = user;
+    return reply.send({ success: true, data: userSemSenha });
   });
-});
 
-// Get current user (protegida)
-router.get("/me", authMiddleware, getCurrentUser);
+  // PUT /api/usuarios/:id
+  app.put<{ Params: { id: string } }>("/:id", { preHandler: authenticate }, async (req, reply) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
 
-// CRUD routes
-router.get("/", getAllUsuarios);
-router.get("/:id", getUsuarioById);
-router.put("/:id", authMiddleware, updateUsuario); // Protegida
-router.delete("/:id", authMiddleware, deleteUsuario); // Protegida
+    if (req.user!.id_usuario !== id) {
+      return reply.status(403).send({ success: false, error: "Você não pode atualizar outro usuário" });
+    }
 
-export default router;
+    const body = updateUsuarioSchema.safeParse(req.body);
+    if (!body.success) {
+      return reply.status(400).send({ success: false, error: body.error.issues[0]?.message ?? "Dados inválidos" });
+    }
+
+    const updated = await prisma.usuario.update({
+      where: { id_usuario: id },
+      data: body.data,
+    });
+
+    const { senha, ...userSemSenha } = updated;
+    return reply.send({ success: true, data: userSemSenha });
+  });
+
+  // DELETE /api/usuarios/:id
+  app.delete<{ Params: { id: string } }>("/:id", { preHandler: authenticate }, async (req, reply) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
+
+    if (req.user!.id_usuario !== id) {
+      return reply.status(403).send({ success: false, error: "Você não pode deletar outro usuário" });
+    }
+
+    await prisma.usuario.delete({ where: { id_usuario: id } });
+    return reply.send({ success: true, message: "Usuário deletado com sucesso" });
+  });
+}

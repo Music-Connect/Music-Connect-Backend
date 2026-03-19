@@ -48,10 +48,12 @@ model Usuario {
   created_at         DateTime  @default(now())
   updated_at         DateTime  @updatedAt
 
-  propostas_enviadas   Proposta[] @relation("Contratante")
-  propostas_recebidas  Proposta[] @relation("Artista")
-  avaliacoes_feitas    Avaliacao[] @relation("Avaliador")
-  avaliacoes_recebidas Avaliacao[] @relation("Avaliado")
+  propostas_enviadas      Proposta[]               @relation("Contratante")
+  propostas_recebidas     Proposta[]               @relation("Artista")
+  avaliacoes_feitas       Avaliacao[]              @relation("Avaliador")
+  avaliacoes_recebidas    Avaliacao[]              @relation("Avaliado")
+  password_reset_tokens   PasswordResetToken[]
+  email_verification_tokens EmailVerificationToken[]
 
   @@index([email])
   @@index([tipo_usuario])
@@ -92,6 +94,36 @@ model Proposta {
   @@index([status])
   @@index([data_evento])
   @@map("propostas")
+}
+
+model PasswordResetToken {
+  id         Int      @id @default(autoincrement())
+  id_usuario Int
+  token      String   @unique
+  expires_at DateTime
+  used       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+
+  @@index([token])
+  @@index([id_usuario])
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id         Int      @id @default(autoincrement())
+  id_usuario Int
+  token      String   @unique
+  expires_at DateTime
+  used       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+
+  @@index([token])
+  @@index([id_usuario])
+  @@map("email_verification_tokens")
 }
 
 model Avaliacao {

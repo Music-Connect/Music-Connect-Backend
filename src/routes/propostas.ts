@@ -1,26 +1,123 @@
-import { Router } from "express";
-import {
-  getPropostasRecebidas,
-  getPropostasEnviadas,
-  getPropostaById,
-  createProposta,
-  updatePropostaStatus,
-  getMinhasPropostas,
-  getAllPropostas,
-} from "../controllers/propostasController.js";
-import { authMiddleware } from "../middleware/auth.js";
+import { FastifyInstance } from "fastify";
+import { prisma } from "../lib/prisma.js";
+import { authenticate } from "../middleware/auth.js";
+import { createPropostaSchema, updatePropostaStatusSchema, paginationSchema } from "../lib/schemas.js";
 
-const router = Router();
+const propostaInclude = {
+  contratante: { select: { id_usuario: true, usuario: true, imagem_perfil_url: true } },
+  artista: { select: { id_usuario: true, usuario: true, imagem_perfil_url: true, genero_musical: true } },
+};
 
-// Public route - no authentication required
-router.get("/", getAllPropostas);
+export async function propostasRoutes(app: FastifyInstance) {
+  // GET /api/propostas/recebidas
+  app.get("/recebidas", { preHandler: authenticate }, async (req, reply) => {
+    const { page, limit } = paginationSchema.parse(req.query);
 
-// Protected routes - authentication required
-router.get("/minhas", authMiddleware, getMinhasPropostas);
-router.get("/recebidas", authMiddleware, getPropostasRecebidas);
-router.get("/enviadas", authMiddleware, getPropostasEnviadas);
-router.get("/:id", authMiddleware, getPropostaById);
-router.post("/", authMiddleware, createProposta);
-router.put("/:id/status", authMiddleware, updatePropostaStatus);
+    const [propostas, total] = await Promise.all([
+      prisma.proposta.findMany({
+        where: { id_artista: req.user!.id_usuario },
+        include: propostaInclude,
+        orderBy: { created_at: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.proposta.count({ where: { id_artista: req.user!.id_usuario } }),
+    ]);
 
-export default router;
+    return reply.send({ success: true, data: propostas, meta: { total, page, limit } });
+  });
+
+  // GET /api/propostas/enviadas
+  app.get("/enviadas", { preHandler: authenticate }, async (req, reply) => {
+    const { page, limit } = paginationSchema.parse(req.query);
+
+    const [propostas, total] = await Promise.all([
+      prisma.proposta.findMany({
+        where: { id_contratante: req.user!.id_usuario },
+        include: propostaInclude,
+        orderBy: { created_at: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.proposta.count({ where: { id_contratante: req.user!.id_usuario } }),
+    ]);
+
+    return reply.send({ success: true, data: propostas, meta: { total, page, limit } });
+  });
+
+  // GET /api/propostas/:id
+  app.get<{ Params: { id: string } }>("/:id", { preHandler: authenticate }, async (req, reply) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
+
+    const proposta = await prisma.proposta.findFirst({
+      where: {
+        id_proposta: id,
+        OR: [{ id_artista: req.user!.id_usuario }, { id_contratante: req.user!.id_usuario }],
+      },
+      include: propostaInclude,
+    });
+
+    if (!proposta) return reply.status(404).send({ success: false, error: "Proposta não encontrada" });
+
+    return reply.send({ success: true, data: proposta });
+  });
+
+  // POST /api/propostas
+  app.post("/", { preHandler: authenticate }, async (req, reply) => {
+    const body = createPropostaSchema.safeParse(req.body);
+    if (!body.success) {
+      return reply.status(400).send({ success: false, error: body.error.issues[0]?.message ?? "Dados inválidos" });
+    }
+
+    const { id_artista, data_evento, hora_evento, valor_oferecido, duracao_horas, ...rest } = body.data;
+    const id_contratante = req.user!.id_usuario;
+
+    if (id_contratante === id_artista) {
+      return reply.status(400).send({ success: false, error: "Você não pode enviar proposta para si mesmo" });
+    }
+
+    const artista = await prisma.usuario.findFirst({ where: { id_usuario: id_artista, tipo_usuario: "artista" } });
+    if (!artista) return reply.status(404).send({ success: false, error: "Artista não encontrado" });
+
+    const proposta = await prisma.proposta.create({
+      data: {
+        ...rest,
+        id_contratante,
+        id_artista,
+        data_evento: new Date(data_evento),
+        valor_oferecido,
+        duracao_horas: duracao_horas ?? null,
+      },
+      include: propostaInclude,
+    });
+
+    return reply.status(201).send({ success: true, data: proposta });
+  });
+
+  // PUT /api/propostas/:id/status
+  app.put<{ Params: { id: string } }>("/:id/status", { preHandler: authenticate }, async (req, reply) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
+
+    const body = updatePropostaStatusSchema.safeParse(req.body);
+    if (!body.success) {
+      return reply.status(400).send({ success: false, error: body.error.issues[0]?.message ?? "Dados inválidos" });
+    }
+
+    const proposta = await prisma.proposta.findUnique({ where: { id_proposta: id } });
+    if (!proposta) return reply.status(404).send({ success: false, error: "Proposta não encontrada" });
+
+    if (proposta.id_artista !== req.user!.id_usuario) {
+      return reply.status(403).send({ success: false, error: "Apenas o artista pode aceitar ou recusar propostas" });
+    }
+
+    const updated = await prisma.proposta.update({
+      where: { id_proposta: id },
+      data: body.data,
+      include: propostaInclude,
+    });
+
+    return reply.send({ success: true, data: updated });
+  });
+}

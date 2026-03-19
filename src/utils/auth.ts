@@ -1,59 +1,37 @@
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import { hash, compare } from "@node-rs/bcrypt";
+import { SignJWT, jwtVerify } from "jose";
 import crypto from "crypto";
-import { Usuario } from "../types/index.js";
 
 const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error("JWT_SECRET não configurado");
 
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET nao configurado");
-}
+const secret = new TextEncoder().encode(JWT_SECRET);
 
-export const hashPassword = async (password: string): Promise<string> => {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
+export const hashPassword = (password: string) => hash(password, 10);
+
+export const comparePassword = (password: string, hashed: string) =>
+  compare(password, hashed);
+
+export const generateToken = async (payload: {
+  id_usuario: number;
+  email: string;
+  tipo_usuario: string;
+}): Promise<string> => {
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("7d")
+    .sign(secret);
 };
 
-export const comparePassword = async (
-  password: string,
-  hashedPassword: string,
-): Promise<boolean> => {
-  return bcrypt.compare(password, hashedPassword);
-};
-
-export const generateToken = (user: Omit<Usuario, "senha">): string => {
-  return jwt.sign(
-    {
-      id_usuario: user.id_usuario,
-      email: user.email,
-      tipo_usuario: user.tipo_usuario,
-    },
-    JWT_SECRET,
-    { expiresIn: "7d" },
-  );
-};
-
-export const verifyToken = (
+export const verifyToken = async (
   token: string,
-): { id_usuario: number; email: string; tipo_usuario: string } => {
-  return jwt.verify(token, JWT_SECRET) as {
-    id_usuario: number;
-    email: string;
-    tipo_usuario: string;
-  };
+): Promise<{ id_usuario: number; email: string; tipo_usuario: string }> => {
+  const { payload } = await jwtVerify(token, secret);
+  return payload as { id_usuario: number; email: string; tipo_usuario: string };
 };
 
-export const removePasswordFromUser = (
-  user: Usuario,
-): Omit<Usuario, "senha"> => {
-  const { senha, ...userWithoutPassword } = user;
-  return userWithoutPassword;
-};
+export const generateResetToken = () =>
+  crypto.randomBytes(32).toString("hex");
 
-export const generateResetToken = (): string => {
-  return crypto.randomBytes(32).toString("hex");
-};
-
-export const hashResetToken = (token: string): string => {
-  return crypto.createHash("sha256").update(token).digest("hex");
-};
+export const hashResetToken = (token: string) =>
+  crypto.createHash("sha256").update(token).digest("hex");
