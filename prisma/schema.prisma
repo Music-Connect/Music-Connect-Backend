@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TipoUsuario {
+  artista
+  contratante
+}
+
+enum StatusProposta {
+  pendente
+  aceita
+  recusada
+  cancelada
+}
+
+model Usuario {
+  id_usuario         Int       @id @default(autoincrement())
+  usuario            String
+  email              String    @unique
+  senha              String
+  email_verificado   Boolean   @default(false)
+  email_verificado_em DateTime?
+  tipo_usuario       TipoUsuario
+  telefone           String?
+  imagem_perfil_url  String?
+  descricao          String?
+  cidade             String?
+  estado             String?
+
+  // Campos de artista
+  genero_musical     String?
+  preco_minimo       Decimal?  @db.Decimal(10, 2)
+  preco_maximo       Decimal?  @db.Decimal(10, 2)
+  portfolio          String[]
+  spotify_url        String?
+  instagram_url      String?
+  youtube_url        String?
+
+  // Customização
+  cor_tema           String?
+  cor_banner         String?
+
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  propostas_enviadas   Proposta[] @relation("Contratante")
+  propostas_recebidas  Proposta[] @relation("Artista")
+  avaliacoes_feitas    Avaliacao[] @relation("Avaliador")
+  avaliacoes_recebidas Avaliacao[] @relation("Avaliado")
+
+  @@index([email])
+  @@index([tipo_usuario])
+  @@index([genero_musical])
+  @@index([cidade])
+  @@index([estado])
+  @@map("usuarios")
+}
+
+model Proposta {
+  id_proposta         Int            @id @default(autoincrement())
+  id_contratante      Int
+  id_artista          Int
+  titulo              String
+  descricao           String
+  data_evento         DateTime       @db.Date
+  hora_evento         DateTime?      @db.Time
+  local_evento        String
+  endereco_completo   String?
+  tipo_evento         String?
+  duracao_horas       Decimal?       @db.Decimal(3, 1)
+  publico_esperado    Int?
+  equipamento_incluso Boolean        @default(false)
+  nome_responsavel    String?
+  telefone_contato    String?
+  observacoes         String?
+  valor_oferecido     Decimal        @db.Decimal(10, 2)
+  status              StatusProposta @default(pendente)
+  mensagem_resposta   String?
+  created_at          DateTime       @default(now())
+  updated_at          DateTime       @updatedAt
+
+  contratante Usuario @relation("Contratante", fields: [id_contratante], references: [id_usuario], onDelete: Cascade)
+  artista     Usuario @relation("Artista", fields: [id_artista], references: [id_usuario], onDelete: Cascade)
+
+  @@index([id_contratante])
+  @@index([id_artista])
+  @@index([status])
+  @@index([data_evento])
+  @@map("propostas")
+}
+
+model Avaliacao {
+  id_avaliacao Int      @id @default(autoincrement())
+  id_avaliador Int
+  id_avaliado  Int
+  nota         Int
+  comentario   String?
+  created_at   DateTime @default(now())
+
+  avaliador Usuario @relation("Avaliador", fields: [id_avaliador], references: [id_usuario], onDelete: Cascade)
+  avaliado  Usuario @relation("Avaliado", fields: [id_avaliado], references: [id_usuario], onDelete: Cascade)
+
+  @@unique([id_avaliador, id_avaliado])
+  @@index([id_avaliado])
+  @@index([id_avaliador])
+  @@map("avaliacoes")
+}
