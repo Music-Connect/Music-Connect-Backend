@@ -6,14 +6,11 @@ import { createAvaliacaoSchema } from "../lib/schemas.js";
 export async function avaliacoesRoutes(app: FastifyInstance) {
   // GET /api/avaliacoes/usuario/:id
   app.get<{ Params: { id: string } }>("/usuario/:id", async (req, reply) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
-
     const avaliacoes = await prisma.avaliacao.findMany({
-      where: { id_avaliado: id },
+      where: { id_avaliado: req.params.id },
       orderBy: { created_at: "desc" },
       include: {
-        avaliador: { select: { usuario: true, imagem_perfil_url: true } },
+        avaliador: { select: { name: true, image: true } },
       },
     });
 
@@ -22,11 +19,8 @@ export async function avaliacoesRoutes(app: FastifyInstance) {
 
   // GET /api/avaliacoes/usuario/:id/media
   app.get<{ Params: { id: string } }>("/usuario/:id/media", async (req, reply) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
-
     const result = await prisma.avaliacao.aggregate({
-      where: { id_avaliado: id },
+      where: { id_avaliado: req.params.id },
       _avg: { nota: true },
       _count: { nota: true },
     });
@@ -48,7 +42,7 @@ export async function avaliacoesRoutes(app: FastifyInstance) {
     }
 
     const { id_avaliado, nota, comentario } = body.data;
-    const id_avaliador = req.user!.id_usuario;
+    const id_avaliador = req.user!.id;
 
     if (id_avaliador === id_avaliado) {
       return reply.status(400).send({ success: false, error: "Você não pode avaliar a si mesmo" });
@@ -70,7 +64,7 @@ export async function avaliacoesRoutes(app: FastifyInstance) {
 
     const avaliacao = await prisma.avaliacao.create({
       data: { id_avaliador, id_avaliado, nota, comentario },
-      include: { avaliador: { select: { usuario: true, imagem_perfil_url: true } } },
+      include: { avaliador: { select: { name: true, image: true } } },
     });
 
     return reply.status(201).send({ success: true, data: avaliacao });

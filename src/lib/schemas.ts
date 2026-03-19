@@ -1,33 +1,7 @@
 import { z } from "zod";
 
-export const registerSchema = z.object({
-  usuario: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-  email: z.string().email("Email inválido"),
-  senha: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
-  tipo_usuario: z.enum(["artista", "contratante"]),
-  telefone: z.string().optional(),
-  cidade: z.string().optional(),
-  estado: z.string().max(2).optional(),
-  descricao: z.string().optional(),
-  genero_musical: z.string().optional(),
-});
-
-export const loginSchema = z.object({
-  email: z.string().email("Email inválido"),
-  senha: z.string().min(1, "Senha é obrigatória"),
-});
-
-export const forgotPasswordSchema = z.object({
-  email: z.string().email("Email inválido"),
-});
-
-export const resetPasswordSchema = z.object({
-  token: z.string().min(1, "Token é obrigatório"),
-  novaSenha: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
-});
-
 export const updateUsuarioSchema = z.object({
-  usuario: z.string().min(2).optional(),
+  name: z.string().min(2).optional(),
   descricao: z.string().optional(),
   telefone: z.string().optional(),
   cidade: z.string().optional(),
@@ -35,7 +9,7 @@ export const updateUsuarioSchema = z.object({
   genero_musical: z.string().optional(),
   cor_tema: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   cor_banner: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  imagem_perfil_url: z.string().url().optional(),
+  image: z.string().url().optional(),
   preco_minimo: z.number().positive().optional(),
   preco_maximo: z.number().positive().optional(),
   portfolio: z.array(z.string().url()).optional(),
@@ -45,7 +19,7 @@ export const updateUsuarioSchema = z.object({
 });
 
 export const createPropostaSchema = z.object({
-  id_artista: z.number().int().positive(),
+  id_artista: z.string().min(1, "ID do artista é obrigatório"),
   titulo: z.string().min(3, "Título deve ter pelo menos 3 caracteres"),
   descricao: z.string().min(10, "Descrição deve ter pelo menos 10 caracteres"),
   data_evento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (use YYYY-MM-DD)"),
@@ -68,7 +42,7 @@ export const updatePropostaStatusSchema = z.object({
 });
 
 export const createAvaliacaoSchema = z.object({
-  id_avaliado: z.number().int().positive(),
+  id_avaliado: z.string().min(1, "ID do avaliado é obrigatório"),
   nota: z.number().int().min(1).max(5),
   comentario: z.string().optional(),
 });

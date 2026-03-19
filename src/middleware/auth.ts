@@ -1,8 +1,9 @@
 import { FastifyRequest, FastifyReply } from "fastify";
-import { verifyToken } from "../utils/auth.js";
+import { auth } from "../lib/auth.js";
+import { fromNodeHeaders } from "better-auth/node";
 
 export interface AuthUser {
-  id_usuario: number;
+  id: string;
   email: string;
   tipo_usuario: string;
 }
@@ -13,20 +14,18 @@ declare module "fastify" {
   }
 }
 
-export const authenticate = async (
-  req: FastifyRequest,
-  reply: FastifyReply,
-) => {
-  const token =
-    req.cookies?.token || req.headers.authorization?.replace("Bearer ", "");
+export const authenticate = async (req: FastifyRequest, reply: FastifyReply) => {
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders(req.headers),
+  });
 
-  if (!token) {
+  if (!session) {
     return reply.status(401).send({ success: false, error: "Não autorizado" });
   }
 
-  try {
-    req.user = await verifyToken(token);
-  } catch {
-    return reply.status(401).send({ success: false, error: "Token inválido" });
-  }
+  req.user = {
+    id: session.user.id,
+    email: session.user.email,
+    tipo_usuario: (session.user as any).tipo_usuario ?? "",
+  };
 };

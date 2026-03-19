@@ -4,8 +4,8 @@ import { authenticate } from "../middleware/auth.js";
 import { createPropostaSchema, updatePropostaStatusSchema, paginationSchema } from "../lib/schemas.js";
 
 const propostaInclude = {
-  contratante: { select: { id_usuario: true, usuario: true, imagem_perfil_url: true } },
-  artista: { select: { id_usuario: true, usuario: true, imagem_perfil_url: true, genero_musical: true } },
+  contratante: { select: { id: true, name: true, image: true } },
+  artista: { select: { id: true, name: true, image: true, genero_musical: true } },
 };
 
 export async function propostasRoutes(app: FastifyInstance) {
@@ -15,13 +15,13 @@ export async function propostasRoutes(app: FastifyInstance) {
 
     const [propostas, total] = await Promise.all([
       prisma.proposta.findMany({
-        where: { id_artista: req.user!.id_usuario },
+        where: { id_artista: req.user!.id },
         include: propostaInclude,
         orderBy: { created_at: "desc" },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.proposta.count({ where: { id_artista: req.user!.id_usuario } }),
+      prisma.proposta.count({ where: { id_artista: req.user!.id } }),
     ]);
 
     return reply.send({ success: true, data: propostas, meta: { total, page, limit } });
@@ -33,13 +33,13 @@ export async function propostasRoutes(app: FastifyInstance) {
 
     const [propostas, total] = await Promise.all([
       prisma.proposta.findMany({
-        where: { id_contratante: req.user!.id_usuario },
+        where: { id_contratante: req.user!.id },
         include: propostaInclude,
         orderBy: { created_at: "desc" },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.proposta.count({ where: { id_contratante: req.user!.id_usuario } }),
+      prisma.proposta.count({ where: { id_contratante: req.user!.id } }),
     ]);
 
     return reply.send({ success: true, data: propostas, meta: { total, page, limit } });
@@ -53,7 +53,7 @@ export async function propostasRoutes(app: FastifyInstance) {
     const proposta = await prisma.proposta.findFirst({
       where: {
         id_proposta: id,
-        OR: [{ id_artista: req.user!.id_usuario }, { id_contratante: req.user!.id_usuario }],
+        OR: [{ id_artista: req.user!.id }, { id_contratante: req.user!.id }],
       },
       include: propostaInclude,
     });
@@ -71,13 +71,13 @@ export async function propostasRoutes(app: FastifyInstance) {
     }
 
     const { id_artista, data_evento, hora_evento, valor_oferecido, duracao_horas, ...rest } = body.data;
-    const id_contratante = req.user!.id_usuario;
+    const id_contratante = req.user!.id;
 
     if (id_contratante === id_artista) {
       return reply.status(400).send({ success: false, error: "Você não pode enviar proposta para si mesmo" });
     }
 
-    const artista = await prisma.usuario.findFirst({ where: { id_usuario: id_artista, tipo_usuario: "artista" } });
+    const artista = await prisma.user.findFirst({ where: { id: id_artista, tipo_usuario: "artista" } });
     if (!artista) return reply.status(404).send({ success: false, error: "Artista não encontrado" });
 
     const proposta = await prisma.proposta.create({
@@ -108,7 +108,7 @@ export async function propostasRoutes(app: FastifyInstance) {
     const proposta = await prisma.proposta.findUnique({ where: { id_proposta: id } });
     if (!proposta) return reply.status(404).send({ success: false, error: "Proposta não encontrada" });
 
-    if (proposta.id_artista !== req.user!.id_usuario) {
+    if (proposta.id_artista !== req.user!.id) {
       return reply.status(403).send({ success: false, error: "Apenas o artista pode aceitar ou recusar propostas" });
     }
 

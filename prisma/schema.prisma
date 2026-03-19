@@ -18,55 +18,97 @@ enum StatusProposta {
   cancelada
 }
 
-model Usuario {
-  id_usuario         Int       @id @default(autoincrement())
-  usuario            String
-  email              String    @unique
-  senha              String
-  email_verificado   Boolean   @default(false)
-  email_verificado_em DateTime?
-  tipo_usuario       TipoUsuario
-  telefone           String?
-  imagem_perfil_url  String?
-  descricao          String?
-  cidade             String?
-  estado             String?
+// Better Auth core models
+model User {
+  id            String      @id @default(cuid())
+  name          String
+  email         String      @unique
+  emailVerified Boolean     @default(false)
+  image         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  // Campos de artista
-  genero_musical     String?
-  preco_minimo       Decimal?  @db.Decimal(10, 2)
-  preco_maximo       Decimal?  @db.Decimal(10, 2)
-  portfolio          String[]
-  spotify_url        String?
-  instagram_url      String?
-  youtube_url        String?
+  // Domain-specific fields
+  tipo_usuario   TipoUsuario?
+  telefone       String?
+  descricao      String?
+  cidade         String?
+  estado         String?
+  genero_musical String?
+  preco_minimo   Decimal?    @db.Decimal(10, 2)
+  preco_maximo   Decimal?    @db.Decimal(10, 2)
+  portfolio      String[]
+  spotify_url    String?
+  instagram_url  String?
+  youtube_url    String?
+  cor_tema       String?
+  cor_banner     String?
 
-  // Customização
-  cor_tema           String?
-  cor_banner         String?
-
-  created_at         DateTime  @default(now())
-  updated_at         DateTime  @updatedAt
-
-  propostas_enviadas      Proposta[]               @relation("Contratante")
-  propostas_recebidas     Proposta[]               @relation("Artista")
-  avaliacoes_feitas       Avaliacao[]              @relation("Avaliador")
-  avaliacoes_recebidas    Avaliacao[]              @relation("Avaliado")
-  password_reset_tokens   PasswordResetToken[]
-  email_verification_tokens EmailVerificationToken[]
+  sessions             Session[]
+  accounts             Account[]
+  propostas_enviadas   Proposta[]  @relation("Contratante")
+  propostas_recebidas  Proposta[]  @relation("Artista")
+  avaliacoes_feitas    Avaliacao[] @relation("Avaliador")
+  avaliacoes_recebidas Avaliacao[] @relation("Avaliado")
 
   @@index([email])
   @@index([tipo_usuario])
   @@index([genero_musical])
   @@index([cidade])
   @@index([estado])
-  @@map("usuarios")
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verifications")
 }
 
 model Proposta {
   id_proposta         Int            @id @default(autoincrement())
-  id_contratante      Int
-  id_artista          Int
+  id_contratante      String
+  id_artista          String
   titulo              String
   descricao           String
   data_evento         DateTime       @db.Date
@@ -86,8 +128,8 @@ model Proposta {
   created_at          DateTime       @default(now())
   updated_at          DateTime       @updatedAt
 
-  contratante Usuario @relation("Contratante", fields: [id_contratante], references: [id_usuario], onDelete: Cascade)
-  artista     Usuario @relation("Artista", fields: [id_artista], references: [id_usuario], onDelete: Cascade)
+  contratante User @relation("Contratante", fields: [id_contratante], references: [id], onDelete: Cascade)
+  artista     User @relation("Artista", fields: [id_artista], references: [id], onDelete: Cascade)
 
   @@index([id_contratante])
   @@index([id_artista])
@@ -96,46 +138,16 @@ model Proposta {
   @@map("propostas")
 }
 
-model PasswordResetToken {
-  id         Int      @id @default(autoincrement())
-  id_usuario Int
-  token      String   @unique
-  expires_at DateTime
-  used       Boolean  @default(false)
-  created_at DateTime @default(now())
-
-  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
-
-  @@index([token])
-  @@index([id_usuario])
-  @@map("password_reset_tokens")
-}
-
-model EmailVerificationToken {
-  id         Int      @id @default(autoincrement())
-  id_usuario Int
-  token      String   @unique
-  expires_at DateTime
-  used       Boolean  @default(false)
-  created_at DateTime @default(now())
-
-  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
-
-  @@index([token])
-  @@index([id_usuario])
-  @@map("email_verification_tokens")
-}
-
 model Avaliacao {
   id_avaliacao Int      @id @default(autoincrement())
-  id_avaliador Int
-  id_avaliado  Int
+  id_avaliador String
+  id_avaliado  String
   nota         Int
   comentario   String?
   created_at   DateTime @default(now())
 
-  avaliador Usuario @relation("Avaliador", fields: [id_avaliador], references: [id_usuario], onDelete: Cascade)
-  avaliado  Usuario @relation("Avaliado", fields: [id_avaliado], references: [id_usuario], onDelete: Cascade)
+  avaliador User @relation("Avaliador", fields: [id_avaliador], references: [id], onDelete: Cascade)
+  avaliado  User @relation("Avaliado", fields: [id_avaliado], references: [id], onDelete: Cascade)
 
   @@unique([id_avaliador, id_avaliado])
   @@index([id_avaliado])

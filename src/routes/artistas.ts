@@ -22,14 +22,13 @@ export async function artistasRoutes(app: FastifyInstance) {
     }
 
     const [artistas, total] = await Promise.all([
-      prisma.usuario.findMany({
+      prisma.user.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { created_at: "desc" },
-        omit: { senha: true },
+        orderBy: { createdAt: "desc" },
       }),
-      prisma.usuario.count({ where }),
+      prisma.user.count({ where }),
     ]);
 
     return reply.send({
@@ -41,24 +40,23 @@ export async function artistasRoutes(app: FastifyInstance) {
 
   // GET /api/artistas/:id
   app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
-
-    const artista = await prisma.usuario.findFirst({
-      where: { id_usuario: id, tipo_usuario: "artista" },
-      omit: { senha: true },
+    const artista = await prisma.user.findFirst({
+      where: { id: req.params.id, tipo_usuario: "artista" },
     });
 
-    if (!artista) return reply.status(404).send({ success: false, error: "Artista não encontrado" });
+    if (!artista)
+      return reply.status(404).send({ success: false, error: "Artista não encontrado" });
 
     const [avaliacoes, mediaResult] = await Promise.all([
       prisma.avaliacao.findMany({
-        where: { id_avaliado: id },
+        where: { id_avaliado: req.params.id },
         orderBy: { created_at: "desc" },
-        include: { avaliador: { select: { usuario: true, imagem_perfil_url: true } } },
+        include: {
+          avaliador: { select: { name: true, image: true } },
+        },
       }),
       prisma.avaliacao.aggregate({
-        where: { id_avaliado: id },
+        where: { id_avaliado: req.params.id },
         _avg: { nota: true },
         _count: { nota: true },
       }),
@@ -77,10 +75,7 @@ export async function artistasRoutes(app: FastifyInstance) {
 
   // PUT /api/artistas/:id
   app.put<{ Params: { id: string } }>("/:id", { preHandler: authenticate }, async (req, reply) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
-
-    if (req.user!.id_usuario !== id) {
+    if (req.user!.id !== req.params.id) {
       return reply.status(403).send({ success: false, error: "Você não pode atualizar outro artista" });
     }
 
@@ -89,10 +84,9 @@ export async function artistasRoutes(app: FastifyInstance) {
       return reply.status(400).send({ success: false, error: body.error.issues[0]?.message ?? "Dados inválidos" });
     }
 
-    const updated = await prisma.usuario.update({
-      where: { id_usuario: id },
+    const updated = await prisma.user.update({
+      where: { id: req.params.id },
       data: body.data,
-      omit: { senha: true },
     });
 
     return reply.send({ success: true, data: updated });
