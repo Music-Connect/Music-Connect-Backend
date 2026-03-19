@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import { prisma } from "./lib/prisma.js";
-import { authRoutes } from "./routes/auth.js";
+import { auth } from "./lib/auth.js";
 import { usuariosRoutes } from "./routes/usuarios.js";
 import { artistasRoutes } from "./routes/artistas.js";
 import { propostasRoutes } from "./routes/propostas.js";
@@ -20,7 +20,49 @@ await app.register(cookie);
 
 app.get("/health", async () => ({ status: "ok", timestamp: new Date() }));
 
-await app.register(authRoutes, { prefix: "/api/auth" });
+// Better Auth — gerencia todas as rotas /api/auth/*
+// Endpoints disponíveis:
+//   POST /api/auth/sign-up/email   (registro)
+//   POST /api/auth/sign-in/email   (login)
+//   POST /api/auth/sign-out        (logout)
+//   POST /api/auth/forget-password (esqueci a senha)
+//   POST /api/auth/reset-password  (redefinir senha)
+//   GET  /api/auth/session         (sessão atual)
+app.all("/api/auth/*", async (request, reply) => {
+  const host = request.headers.host || `localhost:${process.env.PORT || 3001}`;
+  const url = `http://${host}${request.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+  }
+
+  let body: string | undefined;
+  if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
+    body = JSON.stringify(request.body);
+    headers.set("content-type", "application/json");
+    headers.set("content-length", Buffer.byteLength(body).toString());
+  }
+
+  const webRequest = new Request(url, { method: request.method, headers, body });
+  const response = await auth.handler(webRequest);
+
+  reply.status(response.status);
+  for (const [key, value] of response.headers.entries()) {
+    reply.header(key, value);
+  }
+
+  const text = await response.text();
+  if (text) {
+    try {
+      return reply.send(JSON.parse(text));
+    } catch {
+      return reply.send(text);
+    }
+  }
+  return reply.send();
+});
+
 await app.register(usuariosRoutes, { prefix: "/api/usuarios" });
 await app.register(artistasRoutes, { prefix: "/api/artistas" });
 await app.register(propostasRoutes, { prefix: "/api/propostas" });
