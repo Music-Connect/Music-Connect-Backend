@@ -6,6 +6,14 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  session: {
+    expiresIn: 60 * 60 * 24 * 30, // 30 dias
+    updateAge: 60 * 60 * 24,       // renova o cookie a cada 1 dia de uso
+    cookieCache: {
+      enabled: true,
+      maxAge: 60 * 5,              // cache local por 5 minutos
+    },
+  },
   emailAndPassword: {
     enabled: true,
     sendResetPassword: async ({ user, url }) => {

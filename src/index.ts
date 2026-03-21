@@ -48,8 +48,21 @@ app.all("/api/auth/*", async (request, reply) => {
   const response = await auth.handler(webRequest);
 
   reply.status(response.status);
+
+  // Skip CORS headers — @fastify/cors already handles them.
+  // Forwarding them from Better Auth causes duplicate headers, which browsers reject.
+  const skipHeaders = new Set([
+    "access-control-allow-origin",
+    "access-control-allow-credentials",
+    "access-control-allow-methods",
+    "access-control-allow-headers",
+    "access-control-expose-headers",
+    "vary",
+  ]);
   for (const [key, value] of response.headers.entries()) {
-    reply.header(key, value);
+    if (!skipHeaders.has(key.toLowerCase())) {
+      reply.header(key, value);
+    }
   }
 
   const text = await response.text();
