@@ -51,3 +51,53 @@ export const paginationSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
 });
+
+// ── Feed System ──
+
+export const createPostSchema = z.object({
+  conteudo: z.string().min(1, "Conteúdo é obrigatório").max(2000),
+  tipo: z.enum(["post", "disponibilidade", "buscando"]).default("post"),
+  visibilidade: z.enum(["publico", "seguidores", "privado"]).default("publico"),
+  imagens: z.array(z.string().url()).max(10).optional(),
+  video_url: z.string().url().optional(),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+  cidade: z.string().optional(),
+  estado: z.string().max(2).optional(),
+});
+
+export const updatePostSchema = z.object({
+  conteudo: z.string().min(1).max(2000).optional(),
+  tipo: z.enum(["post", "disponibilidade", "buscando"]).optional(),
+  visibilidade: z.enum(["publico", "seguidores", "privado"]).optional(),
+  imagens: z.array(z.string().url()).max(10).optional(),
+  video_url: z.string().url().nullable().optional(),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+  cidade: z.string().nullable().optional(),
+  estado: z.string().max(2).nullable().optional(),
+});
+
+export const createComentarioSchema = z.object({
+  conteudo: z.string().min(1, "Comentário é obrigatório").max(1000),
+  id_comentario_pai: z.string().optional(),
+});
+
+export const createStorySchema = z.object({
+  midia_url: z.string().url("URL de mídia inválida"),
+  tipo_midia: z.enum(["imagem", "video"]).default("imagem"),
+  duracao: z.coerce.number().int().min(1).max(30).default(5),
+});
+
+export const feedQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+  tipo: z.enum(["post", "disponibilidade", "buscando"]).optional(),
+  genero: z.string().optional(),
+  cidade: z.string().optional(),
+  estado: z.string().optional(),
+  tag: z.string().optional(),
+});
+
+export const cursorPaginationSchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+});

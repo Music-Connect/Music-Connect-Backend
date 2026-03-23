@@ -8,6 +8,9 @@ import { usuariosRoutes } from "./routes/usuarios.js";
 import { artistasRoutes } from "./routes/artistas.js";
 import { propostasRoutes } from "./routes/propostas.js";
 import { avaliacoesRoutes } from "./routes/avaliacoes.js";
+import { postsRoutes } from "./routes/posts.js";
+import { storiesRoutes } from "./routes/stories.js";
+import { recomendacoesRoutes } from "./routes/recomendacoes.js";
 
 const app = Fastify({ logger: process.env.NODE_ENV === "development" });
 
@@ -80,6 +83,9 @@ await app.register(usuariosRoutes, { prefix: "/api/usuarios" });
 await app.register(artistasRoutes, { prefix: "/api/artistas" });
 await app.register(propostasRoutes, { prefix: "/api/propostas" });
 await app.register(avaliacoesRoutes, { prefix: "/api/avaliacoes" });
+await app.register(postsRoutes, { prefix: "/api/posts" });
+await app.register(storiesRoutes, { prefix: "/api/stories" });
+await app.register(recomendacoesRoutes, { prefix: "/api/recomendacoes" });
 
 const start = async () => {
   try {

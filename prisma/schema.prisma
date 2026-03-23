@@ -18,6 +18,23 @@ enum StatusProposta {
   cancelada
 }
 
+enum TipoPost {
+  post
+  disponibilidade
+  buscando
+}
+
+enum VisibilidadePost {
+  publico
+  seguidores
+  privado
+}
+
+enum TipoMidia {
+  imagem
+  video
+}
+
 // Better Auth core models
 model User {
   id            String      @id @default(cuid())
@@ -50,6 +67,11 @@ model User {
   propostas_recebidas  Proposta[]  @relation("Artista")
   avaliacoes_feitas    Avaliacao[] @relation("Avaliador")
   avaliacoes_recebidas Avaliacao[] @relation("Avaliado")
+  posts                Post[]        @relation("PostsDoUsuario")
+  curtidas             Curtida[]     @relation("CurtidasDoUsuario")
+  comentarios          Comentario[]  @relation("ComentariosDoUsuario")
+  stories              Story[]       @relation("StoriesDoUsuario")
+  story_views          StoryView[]   @relation("ViewsDoUsuario")
 
   @@index([email])
   @@index([tipo_usuario])
@@ -153,4 +175,104 @@ model Avaliacao {
   @@index([id_avaliado])
   @@index([id_avaliador])
   @@map("avaliacoes")
+}
+
+// ── Feed System ──
+
+model Post {
+  id                String           @id @default(cuid())
+  id_autor          String
+  conteudo          String
+  tipo              TipoPost         @default(post)
+  visibilidade      VisibilidadePost @default(publico)
+  imagens           String[]
+  video_url         String?
+  tags              String[]
+  cidade            String?
+  estado            String?
+  curtidas_count    Int              @default(0)
+  comentarios_count Int              @default(0)
+  created_at        DateTime         @default(now())
+  updated_at        DateTime         @updatedAt
+
+  autor       User         @relation("PostsDoUsuario", fields: [id_autor], references: [id], onDelete: Cascade)
+  curtidas    Curtida[]
+  comentarios Comentario[]
+
+  @@index([id_autor])
+  @@index([tipo])
+  @@index([visibilidade])
+  @@index([cidade])
+  @@index([estado])
+  @@index([created_at(sort: Desc)])
+  @@index([id_autor, created_at(sort: Desc)])
+  @@map("posts")
+}
+
+model Curtida {
+  id         String   @id @default(cuid())
+  id_usuario String
+  id_post    String
+  created_at DateTime @default(now())
+
+  usuario User @relation("CurtidasDoUsuario", fields: [id_usuario], references: [id], onDelete: Cascade)
+  post    Post @relation(fields: [id_post], references: [id], onDelete: Cascade)
+
+  @@unique([id_usuario, id_post])
+  @@index([id_post])
+  @@index([id_usuario])
+  @@map("curtidas")
+}
+
+model Comentario {
+  id                String   @id @default(cuid())
+  id_autor          String
+  id_post           String
+  id_comentario_pai String?
+  conteudo          String
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  autor          User         @relation("ComentariosDoUsuario", fields: [id_autor], references: [id], onDelete: Cascade)
+  post           Post         @relation(fields: [id_post], references: [id], onDelete: Cascade)
+  comentario_pai Comentario?  @relation("Respostas", fields: [id_comentario_pai], references: [id], onDelete: Cascade)
+  respostas      Comentario[] @relation("Respostas")
+
+  @@index([id_post, created_at(sort: Desc)])
+  @@index([id_autor])
+  @@index([id_comentario_pai])
+  @@map("comentarios")
+}
+
+model Story {
+  id          String   @id @default(cuid())
+  id_autor    String
+  midia_url   String
+  tipo_midia  TipoMidia @default(imagem)
+  duracao     Int       @default(5)
+  views_count Int       @default(0)
+  expira_em   DateTime
+  created_at  DateTime  @default(now())
+
+  autor         User        @relation("StoriesDoUsuario", fields: [id_autor], references: [id], onDelete: Cascade)
+  visualizacoes StoryView[]
+
+  @@index([id_autor])
+  @@index([expira_em])
+  @@index([id_autor, expira_em])
+  @@map("stories")
+}
+
+model StoryView {
+  id         String   @id @default(cuid())
+  id_usuario String
+  id_story   String
+  created_at DateTime @default(now())
+
+  usuario User  @relation("ViewsDoUsuario", fields: [id_usuario], references: [id], onDelete: Cascade)
+  story   Story @relation(fields: [id_story], references: [id], onDelete: Cascade)
+
+  @@unique([id_usuario, id_story])
+  @@index([id_story])
+  @@map("story_views")
 }
