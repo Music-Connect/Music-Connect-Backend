@@ -73,6 +73,9 @@ model User {
   stories              Story[]       @relation("StoriesDoUsuario")
   story_views          StoryView[]   @relation("ViewsDoUsuario")
 
+  visitas_feitas       VisitaPerfil[] @relation("VisitasFeitas")
+  visitas_recebidas    VisitaPerfil[] @relation("VisitasRecebidas")
+
   @@index([email])
   @@index([tipo_usuario])
   @@index([genero_musical])
@@ -176,6 +179,21 @@ model Avaliacao {
   @@index([id_avaliador])
   @@map("avaliacoes")
 }
+
+model VisitaPerfil {
+  id_visita    Int      @id @default(autoincrement())
+  id_visitante String?
+  id_artista   String
+  created_at   DateTime @default(now())
+
+  visitante    User?    @relation("VisitasFeitas", fields: [id_visitante], references: [id], onDelete: SetNull)
+  artista      User     @relation("VisitasRecebidas", fields: [id_artista], references: [id], onDelete: Cascade)
+
+  @@index([id_artista])
+  @@index([created_at])
+  @@map("visitas_perfil")
+}
+
 
 // ── Feed System ──
 

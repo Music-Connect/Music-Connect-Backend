@@ -11,9 +11,12 @@ export async function artistasRoutes(app: FastifyInstance) {
     const skip = (page - 1) * limit;
 
     const where: any = { tipo_usuario: "artista" };
-    if (query.genero) where.genero_musical = { contains: query.genero, mode: "insensitive" };
-    if (query.cidade) where.cidade = { contains: query.cidade, mode: "insensitive" };
-    if (query.estado) where.estado = { equals: query.estado, mode: "insensitive" };
+    if (query.genero)
+      where.genero_musical = { contains: query.genero, mode: "insensitive" };
+    if (query.cidade)
+      where.cidade = { contains: query.cidade, mode: "insensitive" };
+    if (query.estado)
+      where.estado = { equals: query.estado, mode: "insensitive" };
     if (query.local) {
       where.OR = [
         { cidade: { contains: query.local, mode: "insensitive" } },
@@ -40,12 +43,24 @@ export async function artistasRoutes(app: FastifyInstance) {
 
   // GET /api/artistas/:id
   app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {
+    const visitorId = (req as any).user?.id;
+    prisma.visitaPerfil
+      .create({
+        data: {
+          id_artista: req.params.id,
+          id_visitante: visitorId,
+        },
+      })
+      .catch((err) => console.error("Erro ao gravar visita:", err));
+
     const artista = await prisma.user.findFirst({
       where: { id: req.params.id, tipo_usuario: "artista" },
     });
 
     if (!artista)
-      return reply.status(404).send({ success: false, error: "Artista não encontrado" });
+      return reply
+        .status(404)
+        .send({ success: false, error: "Artista não encontrado" });
 
     const [avaliacoes, mediaResult] = await Promise.all([
       prisma.avaliacao.findMany({
@@ -74,21 +89,60 @@ export async function artistasRoutes(app: FastifyInstance) {
   });
 
   // PUT /api/artistas/:id
-  app.put<{ Params: { id: string } }>("/:id", { preHandler: authenticate }, async (req, reply) => {
-    if (req.user!.id !== req.params.id) {
-      return reply.status(403).send({ success: false, error: "Você não pode atualizar outro artista" });
+  app.put<{ Params: { id: string } }>(
+    "/:id",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      if (req.user!.id !== req.params.id) {
+        return reply.status(403).send({
+          success: false,
+          error: "Você não pode atualizar outro artista",
+        });
+      }
+
+      const body = updateUsuarioSchema.safeParse(req.body);
+      if (!body.success) {
+        return reply.status(400).send({
+          success: false,
+          error: body.error.issues[0]?.message ?? "Dados inválidos",
+        });
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: req.params.id },
+        data: body.data,
+      });
+
+      return reply.send({ success: true, data: updated });
+    },
+  );
+
+  // GET /api/artistas/analytics
+  app.get("/analytics", { preHandler: authenticate }, async (req, reply) => {
+    const artistaId = req.user!.id;
+
+    if (req.user!.tipo_usuario !== "artista") {
+      return reply
+        .status(403)
+        .send({
+          success: false,
+          error: "Apenas artistas podem ver o analytics",
+        });
     }
 
-    const body = updateUsuarioSchema.safeParse(req.body);
-    if (!body.success) {
-      return reply.status(400).send({ success: false, error: body.error.issues[0]?.message ?? "Dados inválidos" });
-    }
+    const [total, semanal] = await Promise.all([
+      prisma.visitaPerfil.count({ where: { id_artista: artistaId } }),
+      prisma.visitaPerfil.count({
+        where: {
+          id_artista: artistaId,
+          created_at: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+    ]);
 
-    const updated = await prisma.user.update({
-      where: { id: req.params.id },
-      data: body.data,
+    return reply.send({
+      success: true,
+      data: { total_visitas: total, visitas_semanais: semanal },
     });
-
-    return reply.send({ success: true, data: updated });
   });
 }
