@@ -43,15 +43,36 @@ export async function artistasRoutes(app: FastifyInstance) {
 
   // GET /api/artistas/:id
   app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {
-    const visitorId = (req as any).user?.id;
-    prisma.visitaPerfil
-      .create({
-        data: {
-          id_artista: req.params.id,
-          id_visitante: visitorId,
-        },
-      })
-      .catch((err) => console.error("Erro ao gravar visita:", err));
+    const visitorId = (req as any).user?.id ?? null;
+
+    // Fire-and-forget: sem auto-visita, 1 registro por usuário logado por dia
+    if (visitorId !== req.params.id) {
+      (async () => {
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const amanha = new Date(hoje);
+        amanha.setDate(amanha.getDate() + 1);
+
+        if (visitorId) {
+          const jaVisitou = await prisma.visitaPerfil.findFirst({
+            where: {
+              id_artista: req.params.id,
+              id_visitante: visitorId,
+              created_at: { gte: hoje, lt: amanha },
+            },
+          });
+          if (!jaVisitou) {
+            await prisma.visitaPerfil.create({
+              data: { id_artista: req.params.id, id_visitante: visitorId },
+            });
+          }
+        } else {
+          await prisma.visitaPerfil.create({
+            data: { id_artista: req.params.id, id_visitante: null },
+          });
+        }
+      })().catch((err) => console.error("Erro ao gravar visita:", err));
+    }
 
     const artista = await prisma.user.findFirst({
       where: { id: req.params.id, tipo_usuario: "artista" },
@@ -130,19 +151,28 @@ export async function artistasRoutes(app: FastifyInstance) {
         });
     }
 
-    const [total, semanal] = await Promise.all([
+    const seteAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [total, semanal, visitasPorDia] = await Promise.all([
       prisma.visitaPerfil.count({ where: { id_artista: artistaId } }),
       prisma.visitaPerfil.count({
-        where: {
-          id_artista: artistaId,
-          created_at: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        },
+        where: { id_artista: artistaId, created_at: { gte: seteAtras } },
       }),
+      prisma.$queryRaw<{ data: string; visitas: number }[]>`
+        SELECT
+          TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS data,
+          COUNT(*)::int AS visitas
+        FROM visitas_perfil
+        WHERE id_artista = ${artistaId}
+          AND created_at >= ${seteAtras}
+        GROUP BY TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+        ORDER BY data ASC
+      `,
     ]);
 
     return reply.send({
       success: true,
-      data: { total_visitas: total, visitas_semanais: semanal },
+      data: { total_visitas: total, visitas_semanais: semanal, visitas_por_dia: visitasPorDia },
     });
   });
 }
