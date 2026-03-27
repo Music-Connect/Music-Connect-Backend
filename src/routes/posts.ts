@@ -8,6 +8,49 @@ import {
   feedQuerySchema,
   cursorPaginationSchema,
 } from "../lib/schemas.js";
+import { redisGet, redisSetEx } from "../lib/redis.js";
+
+const FEED_FIRST_PAGE_CACHE_TTL_SECONDS = Number(process.env.REDIS_FEED_FIRST_TTL_SECONDS ?? 60 * 60 * 6);
+
+type FeedFirstPageCache = {
+  postIds: string[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
+function getFeedFirstPageCacheKey(userId: string) {
+  return `feed:recomendado:first-page:${userId}`;
+}
+
+async function getCachedFeedFirstPage(userId: string): Promise<FeedFirstPageCache | null> {
+  const raw = await redisGet(getFeedFirstPageCacheKey(userId));
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<FeedFirstPageCache>;
+    if (!Array.isArray(parsed.postIds)) return null;
+    if (typeof parsed.hasMore !== "boolean") return null;
+    if (parsed.nextCursor !== null && typeof parsed.nextCursor !== "string") return null;
+
+    return {
+      postIds: parsed.postIds.filter((id): id is string => typeof id === "string"),
+      nextCursor: parsed.nextCursor,
+      hasMore: parsed.hasMore,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedFeedFirstPage(userId: string, page: FeedFirstPageCache) {
+  if (!page.postIds.length) return;
+
+  await redisSetEx(
+    getFeedFirstPageCacheKey(userId),
+    JSON.stringify(page),
+    FEED_FIRST_PAGE_CACHE_TTL_SECONDS
+  );
+}
 
 const autorSelect = {
   id: true,
@@ -20,6 +63,81 @@ const autorSelect = {
 };
 
 export async function postsRoutes(app: FastifyInstance) {
+  const buildRecommendedFeedPage = async ({
+    userId,
+    cursor,
+    limit,
+  }: {
+    userId: string;
+    cursor?: string;
+    limit: number;
+  }) => {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { cidade: true, estado: true, genero_musical: true },
+    });
+
+    const baseWhere: any = {
+      visibilidade: "publico",
+      id_autor: { not: userId },
+    };
+
+    const tier1 = await prisma.post.findMany({
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      where: { ...baseWhere, cidade: user?.cidade ?? undefined },
+      orderBy: { created_at: "desc" },
+      include: { autor: { select: autorSelect } },
+    });
+
+    if (tier1.length > limit) {
+      tier1.pop();
+      return {
+        posts: tier1,
+        nextCursor: tier1[tier1.length - 1].id,
+        hasMore: true,
+      };
+    }
+
+    const existingIds = tier1.map((p) => p.id);
+    const remaining = limit - tier1.length;
+
+    const tier2 = await prisma.post.findMany({
+      take: remaining + 1,
+      where: { ...baseWhere, estado: user?.estado ?? undefined, id: { notIn: existingIds } },
+      orderBy: { created_at: "desc" },
+      include: { autor: { select: autorSelect } },
+    });
+
+    const combined = [...tier1, ...tier2.slice(0, remaining)];
+    const hasMore = tier2.length > remaining;
+
+    if (combined.length >= limit || !hasMore) {
+      const nextCursor = hasMore ? combined[combined.length - 1]?.id : null;
+      return { posts: combined.slice(0, limit), nextCursor, hasMore };
+    }
+
+    const allIds = combined.map((p) => p.id);
+    const remaining2 = limit - combined.length;
+
+    const tier3 = await prisma.post.findMany({
+      take: remaining2 + 1,
+      where: { ...baseWhere, id: { notIn: allIds } },
+      orderBy: { created_at: "desc" },
+      include: { autor: { select: autorSelect } },
+    });
+
+    const final = [...combined, ...tier3.slice(0, remaining2)];
+    const finalHasMore = tier3.length > remaining2;
+    const nextCursor = finalHasMore ? final[final.length - 1]?.id : null;
+
+    return {
+      posts: final,
+      nextCursor,
+      hasMore: finalHasMore,
+    };
+  };
+
   // ── Feed público (cursor-based) ──
   app.get("/", async (req, reply) => {
     const query = feedQuerySchema.parse(req.query);
@@ -52,66 +170,42 @@ export async function postsRoutes(app: FastifyInstance) {
     const { cursor, limit } = cursorPaginationSchema.parse(req.query);
     const userId = req.user!.id;
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { cidade: true, estado: true, genero_musical: true },
-    });
+    if (!cursor) {
+      const cached = await getCachedFeedFirstPage(userId);
+      if (cached && cached.postIds.length > 0) {
+        const cachedPosts = await prisma.post.findMany({
+          where: {
+            id: { in: cached.postIds },
+            visibilidade: "publico",
+            id_autor: { not: userId },
+          },
+          include: { autor: { select: autorSelect } },
+        });
 
-    // Busca posts públicos excluindo os do próprio usuário
-    const baseWhere: any = {
-      visibilidade: "publico",
-      id_autor: { not: userId },
-    };
+        const postMap = new Map(cachedPosts.map((post) => [post.id, post]));
+        const orderedCachedPosts = cached.postIds.map((id) => postMap.get(id)).filter(Boolean);
 
-    // Tier 1: mesma cidade
-    const tier1 = await prisma.post.findMany({
-      take: limit + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      where: { ...baseWhere, cidade: user?.cidade ?? undefined },
-      orderBy: { created_at: "desc" },
-      include: { autor: { select: autorSelect } },
-    });
-
-    if (tier1.length > limit) {
-      tier1.pop();
-      return reply.send({ success: true, data: tier1, meta: { nextCursor: tier1[tier1.length - 1].id, hasMore: true } });
+        if (orderedCachedPosts.length === cached.postIds.length) {
+          return reply.send({
+            success: true,
+            data: orderedCachedPosts,
+            meta: { nextCursor: cached.nextCursor, hasMore: cached.hasMore },
+          });
+        }
+      }
     }
 
-    // Fill com mesmo estado
-    const existingIds = tier1.map((p) => p.id);
-    const remaining = limit - tier1.length;
+    const page = await buildRecommendedFeedPage({ userId, cursor: cursor ?? undefined, limit });
 
-    const tier2 = await prisma.post.findMany({
-      take: remaining + 1,
-      where: { ...baseWhere, estado: user?.estado ?? undefined, id: { notIn: existingIds } },
-      orderBy: { created_at: "desc" },
-      include: { autor: { select: autorSelect } },
-    });
-
-    const combined = [...tier1, ...tier2.slice(0, remaining)];
-    const hasMore = tier2.length > remaining;
-
-    if (combined.length >= limit || !hasMore) {
-      const nextCursor = hasMore ? combined[combined.length - 1]?.id : null;
-      return reply.send({ success: true, data: combined.slice(0, limit), meta: { nextCursor, hasMore } });
+    if (!cursor) {
+      await setCachedFeedFirstPage(userId, {
+        postIds: page.posts.map((post) => post.id),
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
+      });
     }
 
-    // Fill com restante
-    const allIds = combined.map((p) => p.id);
-    const remaining2 = limit - combined.length;
-
-    const tier3 = await prisma.post.findMany({
-      take: remaining2 + 1,
-      where: { ...baseWhere, id: { notIn: allIds } },
-      orderBy: { created_at: "desc" },
-      include: { autor: { select: autorSelect } },
-    });
-
-    const final = [...combined, ...tier3.slice(0, remaining2)];
-    const finalHasMore = tier3.length > remaining2;
-    const nextCursor = finalHasMore ? final[final.length - 1]?.id : null;
-
-    return reply.send({ success: true, data: final, meta: { nextCursor, hasMore: finalHasMore } });
+    return reply.send({ success: true, data: page.posts, meta: { nextCursor: page.nextCursor, hasMore: page.hasMore } });
   });
 
   // ── Posts de um usuário ──
