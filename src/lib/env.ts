@@ -3,6 +3,7 @@ import { z } from "zod";
 const envSchema = z.object({
   PORT: z.coerce.number().default(3001),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   DATABASE_URL: z.string("DATABASE_URL é obrigatório").url(),
   BETTER_AUTH_SECRET: z.string("BETTER_AUTH_SECRET é obrigatório").min(16, "BETTER_AUTH_SECRET deve ter no mínimo 16 caracteres"),
   BETTER_AUTH_URL: z.string("BETTER_AUTH_URL é obrigatório").url(),

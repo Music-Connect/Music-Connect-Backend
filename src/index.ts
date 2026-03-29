@@ -13,7 +13,19 @@ import { postsRoutes } from "./routes/posts.js";
 import { storiesRoutes } from "./routes/stories.js";
 import { recomendacoesRoutes } from "./routes/recomendacoes.js";
 
-const app = Fastify({ logger: env.NODE_ENV === "development" });
+const app = Fastify({
+  logger: {
+    level: env.LOG_LEVEL,
+    ...(env.NODE_ENV === "development" && {
+      transport: {
+        target: "pino-pretty",
+        options: { colorize: true, translateTime: "HH:MM:ss", ignore: "pid,hostname" },
+      },
+    }),
+  },
+  genReqId: () => crypto.randomUUID(),
+  requestIdHeader: "x-request-id",
+});
 
 await app.register(cors, {
   origin: env.CORS_ORIGIN.split(","),
@@ -21,6 +33,19 @@ await app.register(cors, {
 });
 
 await app.register(cookie);
+
+app.addHook("onResponse", (request, reply, done) => {
+  request.log.info(
+    { method: request.method, url: request.url, statusCode: reply.statusCode, responseTime: Math.round(reply.elapsedTime) },
+    "request completed"
+  );
+  done();
+});
+
+app.addHook("onSend", (_request, reply, _payload, done) => {
+  reply.header("x-request-id", reply.request.id);
+  done();
+});
 
 app.get("/health", async () => {
   const dbStart = Date.now();
