@@ -22,7 +22,30 @@ await app.register(cors, {
 
 await app.register(cookie);
 
-app.get("/health", async () => ({ status: "ok", timestamp: new Date() }));
+app.get("/health", async () => {
+  const dbStart = Date.now();
+  let dbStatus = "ok";
+  let dbLatency = 0;
+
+  try {
+    await prisma.$queryRawUnsafe("SELECT 1");
+    dbLatency = Date.now() - dbStart;
+  } catch {
+    dbStatus = "erro";
+    dbLatency = Date.now() - dbStart;
+  }
+
+  return {
+    status: dbStatus === "ok" ? "ok" : "degradado",
+    versao: "1.0.0",
+    ambiente: env.NODE_ENV,
+    timestamp: new Date(),
+    banco: {
+      status: dbStatus,
+      latencia_ms: dbLatency,
+    },
+  };
+});
 
 // Better Auth — gerencia todas as rotas /api/auth/*
 // Endpoints disponíveis:
