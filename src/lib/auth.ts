@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./prisma.js";
+import { env } from "./env.js";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -17,7 +18,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     sendResetPassword: async ({ user, url }) => {
-      if (process.env.NODE_ENV !== "production") {
+      if (env.NODE_ENV !== "production") {
         console.log(`[dev] Reset de senha para ${user.email}: ${url}`);
       }
       // TODO: configurar provider de email (Resend, SendGrid, etc.) para produção
@@ -57,5 +58,5 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:3000"],
+  trustedOrigins: env.CORS_ORIGIN.split(","),
 });
