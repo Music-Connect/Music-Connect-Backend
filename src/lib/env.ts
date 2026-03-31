@@ -9,6 +9,8 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.string("BETTER_AUTH_URL é obrigatório").url(),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
   FRONTEND_URL: z.string().url().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
   EMAIL_HOST: z.string().optional(),
   EMAIL_PORT: z.coerce.number().optional(),
   EMAIL_USER: z.string().optional(),

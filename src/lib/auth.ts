@@ -15,6 +15,13 @@ export const auth = betterAuth({
       maxAge: 60 * 5,              // cache local por 5 minutos
     },
   },
+  socialProviders: {
+    google: {
+      clientId: env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: env.GOOGLE_CLIENT_SECRET ?? "",
+      enabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+    },
+  },
   emailAndPassword: {
     enabled: true,
     sendResetPassword: async ({ user, url }) => {
@@ -28,7 +35,8 @@ export const auth = betterAuth({
     additionalFields: {
       tipo_usuario: {
         type: "string",
-        required: true,
+        required: false,
+        defaultValue: "",
         input: true,
       },
       telefone: {
