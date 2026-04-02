@@ -1,21 +1,32 @@
 import { z } from "zod";
 
+const phoneRegex = /^\+?[0-9()\-\s]{8,20}$/;
+
 export const updateUsuarioSchema = z.object({
-  name: z.string().min(2).optional(),
-  descricao: z.string().optional(),
-  telefone: z.string().optional(),
-  cidade: z.string().optional(),
-  estado: z.string().max(2).optional(),
-  genero_musical: z.string().optional(),
-  cor_tema: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  cor_banner: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  image: z.string().url().optional(),
-  preco_minimo: z.number().positive().optional(),
-  preco_maximo: z.number().positive().optional(),
-  portfolio: z.array(z.string().url()).optional(),
-  spotify_url: z.string().url().optional(),
-  instagram_url: z.string().optional(),
-  youtube_url: z.string().url().optional(),
+  name: z
+    .string()
+    .trim()
+    .max(100)
+    .refine((value) => value === "" || value.length >= 2, "Nome deve ter pelo menos 2 caracteres")
+    .optional(),
+  descricao: z.string().trim().max(1000).optional(),
+  telefone: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || phoneRegex.test(value), "Número de telefone inválido")
+    .optional(),
+  cidade: z
+    .string()
+    .trim()
+    .max(100)
+    .refine((value) => value === "" || value.length >= 2, "Cidade deve ter pelo menos 2 caracteres")
+    .optional(),
+  estado: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .refine((value) => value === "" || /^[A-Z]{2}$/.test(value), "Estado deve conter 2 letras (UF)")
+    .optional(),
 });
 
 export const createPropostaSchema = z.object({
