@@ -11,6 +11,8 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  REDIS_URL: z.string().optional(),
+  REDIS_FEED_FIRST_TTL_SECONDS: z.coerce.number().optional(),
   EMAIL_HOST: z.string().optional(),
   EMAIL_PORT: z.coerce.number().optional(),
   EMAIL_USER: z.string().optional(),

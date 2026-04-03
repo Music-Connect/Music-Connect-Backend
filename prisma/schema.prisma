@@ -38,23 +38,23 @@ enum TipoMidia {
 // Better Auth core models
 model User {
   id            String      @id @default(cuid())
-  name          String
+  name          String      @db.VarChar(100)
   email         String      @unique
   emailVerified Boolean     @default(false)
-  image         String?
+  image         String?     @db.VarChar(500)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   // Domain-specific fields
   tipo_usuario   TipoUsuario?
-  telefone       String?
-  descricao      String?
-  cidade         String?
-  estado         String?
+  telefone       String      @default("") @db.VarChar(20)
+  descricao      String      @default("") @db.VarChar(1000)
+  cidade         String      @default("") @db.VarChar(100)
+  estado         String      @default("") @db.VarChar(2)
   genero_musical String?
   preco_minimo   Decimal?    @db.Decimal(10, 2)
   preco_maximo   Decimal?    @db.Decimal(10, 2)
-  portfolio      String[]
+  portfolio      String[]    @default([])
   spotify_url    String?
   instagram_url  String?
   youtube_url    String?
