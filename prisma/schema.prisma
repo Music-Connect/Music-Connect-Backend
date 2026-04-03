@@ -72,6 +72,8 @@ model User {
   comentarios          Comentario[]  @relation("ComentariosDoUsuario")
   stories              Story[]       @relation("StoriesDoUsuario")
   story_views          StoryView[]   @relation("ViewsDoUsuario")
+  visitas_feitas       VisitaPerfil[] @relation("VisitasFeitas")
+  visitas_recebidas    VisitaPerfil[] @relation("VisitasRecebidas")
 
   visitas_feitas       VisitaPerfil[] @relation("VisitasFeitas")
   visitas_recebidas    VisitaPerfil[] @relation("VisitasRecebidas")
