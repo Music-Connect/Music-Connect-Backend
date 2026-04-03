@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
 import { auth } from "./lib/auth.js";
 import { usuariosRoutes } from "./routes/usuarios.js";
@@ -13,10 +14,10 @@ import { postsRoutes } from "./routes/posts.js";
 import { storiesRoutes } from "./routes/stories.js";
 import { recomendacoesRoutes } from "./routes/recomendacoes.js";
 
-const app = Fastify({ logger: process.env.NODE_ENV === "development" });
+const app = Fastify({ logger: env.NODE_ENV === "development" });
 
 await app.register(cors, {
-  origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:3000"],
+  origin: env.CORS_ORIGIN.split(","),
   credentials: true,
 });
 
@@ -56,7 +57,7 @@ app.all(
     },
   },
   async (request, reply) => {
-    const host = request.headers.host || `localhost:${process.env.PORT || 3001}`;
+    const host = request.headers.host || `localhost:${env.PORT}`;
     const url = `http://${host}${request.url}`;
 
     const headers = new Headers();
@@ -108,16 +109,7 @@ await app.register(artistasRoutes, { prefix: "/api/artistas" });
 await app.register(propostasRoutes, { prefix: "/api/propostas" });
 await app.register(avaliacoesRoutes, { prefix: "/api/avaliacoes" });
 
-// Limite específico para Posts (ex: evitar spam de publicações)
-await app.register(postsRoutes, {
-  prefix: "/api/posts",
-  config: {
-    rateLimit: {
-      max: 50,
-      timeWindow: "1 minute",
-    },
-  },
-});
+await app.register(postsRoutes, { prefix: "/api/posts" });
 
 await app.register(storiesRoutes, { prefix: "/api/stories" });
 await app.register(recomendacoesRoutes, { prefix: "/api/recomendacoes" });
@@ -125,9 +117,8 @@ await app.register(recomendacoesRoutes, { prefix: "/api/recomendacoes" });
 const start = async () => {
   try {
     await prisma.$connect();
-    const PORT = Number(process.env.PORT) || 3001;
-    await app.listen({ port: PORT, host: "0.0.0.0" });
-    console.log(`✅ Backend rodando em http://localhost:${PORT}`);
+    await app.listen({ port: env.PORT, host: "0.0.0.0" });
+    console.log(`✅ Backend rodando em http://localhost:${env.PORT}`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
