@@ -46,17 +46,9 @@ export async function usuariosRoutes(app: FastifyInstance) {
         });
       }
 
-      const dataToUpdate = {
-        name: body.data.name,
-        descricao: body.data.descricao,
-        telefone: body.data.telefone,
-        cidade: body.data.cidade,
-        estado: body.data.estado,
-      };
-
       const updated = await prisma.user.update({
         where: { id: req.params.id },
-        data: dataToUpdate,
+        data: body.data,
       });
 
       return reply.send({ success: true, data: updated });

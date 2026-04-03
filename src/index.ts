@@ -2,6 +2,7 @@ import "dotenv/config";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
 import { auth } from "./lib/auth.js";
 import { usuariosRoutes } from "./routes/usuarios.js";
@@ -12,10 +13,10 @@ import { postsRoutes } from "./routes/posts.js";
 import { storiesRoutes } from "./routes/stories.js";
 import { recomendacoesRoutes } from "./routes/recomendacoes.js";
 
-const app = Fastify({ logger: process.env.NODE_ENV === "development" });
+const app = Fastify({ logger: env.NODE_ENV === "development" });
 
 await app.register(cors, {
-  origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:3000"],
+  origin: env.CORS_ORIGIN.split(","),
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -34,7 +35,7 @@ app.get("/health", async () => ({ status: "ok", timestamp: new Date() }));
 //   POST /api/auth/reset-password  (redefinir senha)
 //   GET  /api/auth/session         (sessão atual)
 app.all("/api/auth/*", async (request, reply) => {
-  const host = request.headers.host || `localhost:${process.env.PORT || 3001}`;
+  const host = request.headers.host || `localhost:${env.PORT}`;
   const url = `http://${host}${request.url}`;
 
   const headers = new Headers();
@@ -92,9 +93,8 @@ await app.register(recomendacoesRoutes, { prefix: "/api/recomendacoes" });
 const start = async () => {
   try {
     await prisma.$connect();
-    const PORT = Number(process.env.PORT) || 3001;
-    await app.listen({ port: PORT, host: "0.0.0.0" });
-    console.log(`✅ Backend rodando em http://localhost:${PORT}`);
+    await app.listen({ port: env.PORT, host: "0.0.0.0" });
+    console.log(`✅ Backend rodando em http://localhost:${env.PORT}`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

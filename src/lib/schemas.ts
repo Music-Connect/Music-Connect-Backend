@@ -27,6 +27,16 @@ export const updateUsuarioSchema = z.object({
     .toUpperCase()
     .refine((value) => value === "" || /^[A-Z]{2}$/.test(value), "Estado deve conter 2 letras (UF)")
     .optional(),
+  genero_musical: z.string().trim().max(100).optional(),
+  preco_minimo: z.number().positive("Preço mínimo deve ser positivo").optional(),
+  preco_maximo: z.number().positive("Preço máximo deve ser positivo").optional(),
+  portfolio: z.array(z.string().url("URL de portfólio inválida")).optional(),
+  spotify_url: z.string().url("URL do Spotify inválida").optional(),
+  instagram_url: z.string().optional(),
+  youtube_url: z.string().url("URL do YouTube inválida").optional(),
+  image: z.string().url("URL da imagem inválida").optional(),
+  cor_tema: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Cor inválida").optional(),
+  cor_banner: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Cor inválida").optional(),
 });
 
 export const createPropostaSchema = z.object({
