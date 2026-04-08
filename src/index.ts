@@ -3,6 +3,9 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
+import staticFiles from "@fastify/static";
+import path from "path";
 import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
 import { auth } from "./lib/auth.js";
@@ -13,6 +16,7 @@ import { avaliacoesRoutes } from "./routes/avaliacoes.js";
 import { postsRoutes } from "./routes/posts.js";
 import { storiesRoutes } from "./routes/stories.js";
 import { recomendacoesRoutes } from "./routes/recomendacoes.js";
+import { uploadsRoutes } from "./routes/uploads.js";
 
 const app = Fastify({
   logger: {
@@ -26,6 +30,15 @@ const app = Fastify({
   },
   genReqId: () => crypto.randomUUID(),
   requestIdHeader: "x-request-id",
+});
+
+await app.register(multipart, {
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+});
+
+await app.register(staticFiles, {
+  root: path.resolve("public"),
+  prefix: "/",
 });
 
 await app.register(cors, {
@@ -155,6 +168,7 @@ await app.register(postsRoutes, { prefix: "/api/posts" });
 
 await app.register(storiesRoutes, { prefix: "/api/stories" });
 await app.register(recomendacoesRoutes, { prefix: "/api/recomendacoes" });
+await app.register(uploadsRoutes, { prefix: "/api/uploads" });
 
 const start = async () => {
   try {

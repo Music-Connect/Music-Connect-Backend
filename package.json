@@ -23,7 +23,9 @@
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
+    "@fastify/multipart": "^10.0.0",
     "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^9.1.0",
     "@node-rs/bcrypt": "^1.10.7",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
