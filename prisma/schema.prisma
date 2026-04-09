@@ -211,6 +211,7 @@ model Post {
   comentarios_count Int              @default(0)
   created_at        DateTime         @default(now())
   updated_at        DateTime         @updatedAt
+  deleted_at        DateTime?
 
   autor       User         @relation("PostsDoUsuario", fields: [id_autor], references: [id], onDelete: Cascade)
   curtidas    Curtida[]
@@ -223,6 +224,7 @@ model Post {
   @@index([estado])
   @@index([created_at(sort: Desc)])
   @@index([id_autor, created_at(sort: Desc)])
+  @@index([deleted_at])
   @@map("posts")
 }
 
