@@ -252,7 +252,7 @@ export async function postsRoutes(app: FastifyInstance) {
     const posts = await prisma.post.findMany({
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      where: { id_autor: id, visibilidade: "publico" },
+      where: { id_autor: id, visibilidade: "publico", deleted_at: null },
       orderBy: { created_at: "desc" },
       include: { autor: { select: autorSelect } },
     });
@@ -275,7 +275,7 @@ export async function postsRoutes(app: FastifyInstance) {
       include: { autor: { select: autorSelect } },
     });
 
-    if (!post)
+    if (!post || post.deleted_at)
       return reply
         .status(404)
         .send({ success: false, error: "Post não encontrado" });
