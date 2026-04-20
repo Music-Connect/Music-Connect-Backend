@@ -2,6 +2,11 @@ import "dotenv/config";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
+import staticFiles from "@fastify/static";
+import path from "path";
+import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
 import { auth } from "./lib/auth.js";
 import { usuariosRoutes } from "./routes/usuarios.js";
@@ -11,17 +16,89 @@ import { avaliacoesRoutes } from "./routes/avaliacoes.js";
 import { postsRoutes } from "./routes/posts.js";
 import { storiesRoutes } from "./routes/stories.js";
 import { recomendacoesRoutes } from "./routes/recomendacoes.js";
+import { uploadsRoutes } from "./routes/uploads.js";
 
-const app = Fastify({ logger: process.env.NODE_ENV === "development" });
+const app = Fastify({
+  logger: {
+    level: env.LOG_LEVEL,
+    ...(env.NODE_ENV === "development" && {
+      transport: {
+        target: "pino-pretty",
+        options: { colorize: true, translateTime: "HH:MM:ss", ignore: "pid,hostname" },
+      },
+    }),
+  },
+  genReqId: () => crypto.randomUUID(),
+  requestIdHeader: "x-request-id",
+});
+
+await app.register(multipart, {
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+});
+
+await app.register(staticFiles, {
+  root: path.resolve("public"),
+  prefix: "/",
+});
 
 await app.register(cors, {
-  origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:3000"],
+  origin: env.CORS_ORIGIN.split(","),
   credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 });
 
 await app.register(cookie);
 
-app.get("/health", async () => ({ status: "ok", timestamp: new Date() }));
+// Rate Limit global
+await app.register(rateLimit, {
+  global: true,
+  max: 100,
+  timeWindow: "1 minute",
+  keyGenerator: (request) => `${request.ip}-${request.url}`,
+  errorResponseBuilder: (_request, context) => ({
+    statusCode: 429,
+    error: "Too Many Requests",
+    message: `Limite de requisições excedido. Tente novamente em ${context.after}.`,
+    date: new Date(),
+    expiresIn: context.after,
+  }),
+});
+
+app.addHook("onResponse", (request, reply, done) => {
+  request.log.info(
+    { method: request.method, url: request.url, statusCode: reply.statusCode, responseTime: Math.round(reply.elapsedTime) },
+    "request completed"
+  );
+  done();
+});
+
+app.addHook("onSend", (_request, reply, _payload, done) => {
+  reply.header("x-request-id", reply.request.id);
+  done();
+});
+
+app.get("/health", async () => {
+  const dbStart = Date.now();
+  let dbStatus = "ok";
+  let dbLatency = 0;
+
+  try {
+    await prisma.$queryRawUnsafe("SELECT 1");
+    dbLatency = Date.now() - dbStart;
+  } catch {
+    dbStatus = "erro";
+    dbLatency = Date.now() - dbStart;
+  }
+
+  return {
+    status: dbStatus === "ok" ? "ok" : "degradado",
+    versao: "1.0.0",
+    ambiente: env.NODE_ENV,
+    timestamp: new Date(),
+    banco: { status: dbStatus, latencia_ms: dbLatency },
+  };
+});
 
 // Better Auth — gerencia todas as rotas /api/auth/*
 // Endpoints disponíveis:
@@ -31,68 +108,73 @@ app.get("/health", async () => ({ status: "ok", timestamp: new Date() }));
 //   POST /api/auth/forget-password (esqueci a senha)
 //   POST /api/auth/reset-password  (redefinir senha)
 //   GET  /api/auth/session         (sessão atual)
-app.all("/api/auth/*", async (request, reply) => {
-  const host = request.headers.host || `localhost:${process.env.PORT || 3001}`;
-  const url = `http://${host}${request.url}`;
+app.all(
+  "/api/auth/*",
+  { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+  async (request, reply) => {
+    const host = request.headers.host || `localhost:${env.PORT}`;
+    const url = `http://${host}${request.url}`;
 
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(request.headers)) {
-    if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
-  }
-
-  let body: string | undefined;
-  if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
-    body = JSON.stringify(request.body);
-    headers.set("content-type", "application/json");
-    headers.set("content-length", Buffer.byteLength(body).toString());
-  }
-
-  const webRequest = new Request(url, { method: request.method, headers, body });
-  const response = await auth.handler(webRequest);
-
-  reply.status(response.status);
-
-  // Skip CORS headers — @fastify/cors already handles them.
-  // Forwarding them from Better Auth causes duplicate headers, which browsers reject.
-  const skipHeaders = new Set([
-    "access-control-allow-origin",
-    "access-control-allow-credentials",
-    "access-control-allow-methods",
-    "access-control-allow-headers",
-    "access-control-expose-headers",
-    "vary",
-  ]);
-  for (const [key, value] of response.headers.entries()) {
-    if (!skipHeaders.has(key.toLowerCase())) {
-      reply.header(key, value);
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
     }
-  }
 
-  const text = await response.text();
-  if (text) {
-    try {
-      return reply.send(JSON.parse(text));
-    } catch {
-      return reply.send(text);
+    let body: string | undefined;
+    if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
+      body = JSON.stringify(request.body);
+      headers.set("content-type", "application/json");
+      headers.set("content-length", Buffer.byteLength(body).toString());
     }
-  }
-  return reply.send();
-});
 
+    const webRequest = new Request(url, { method: request.method, headers, body });
+    const response = await auth.handler(webRequest);
+
+    reply.status(response.status);
+
+    const skipHeaders = new Set([
+      "access-control-allow-origin",
+      "access-control-allow-credentials",
+      "access-control-allow-methods",
+      "access-control-allow-headers",
+      "access-control-expose-headers",
+      "vary",
+    ]);
+    for (const [key, value] of response.headers.entries()) {
+      if (!skipHeaders.has(key.toLowerCase())) {
+        reply.header(key, value);
+      }
+    }
+
+    const text = await response.text();
+    if (text) {
+      try {
+        return reply.send(JSON.parse(text));
+      } catch {
+        return reply.send(text);
+      }
+    }
+    return reply.send();
+  }
+);
+
+// Rotas com limites específicos
 await app.register(usuariosRoutes, { prefix: "/api/usuarios" });
 await app.register(artistasRoutes, { prefix: "/api/artistas" });
 await app.register(propostasRoutes, { prefix: "/api/propostas" });
 await app.register(avaliacoesRoutes, { prefix: "/api/avaliacoes" });
+
 await app.register(postsRoutes, { prefix: "/api/posts" });
+
 await app.register(storiesRoutes, { prefix: "/api/stories" });
 await app.register(recomendacoesRoutes, { prefix: "/api/recomendacoes" });
+await app.register(uploadsRoutes, { prefix: "/api/uploads" });
 
 const start = async () => {
   try {
     await prisma.$connect();
-    const PORT = Number(process.env.PORT) || 3001;
-    await app.listen({ port: PORT, host: "0.0.0.0" });
-    console.log(`✅ Backend rodando em http://localhost:${PORT}`);
+    await app.listen({ port: env.PORT, host: "0.0.0.0" });
+    console.log(`✅ Backend rodando em http://localhost:${env.PORT}`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

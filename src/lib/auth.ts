@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./prisma.js";
+import { env } from "./env.js";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -14,10 +15,17 @@ export const auth = betterAuth({
       maxAge: 60 * 5,              // cache local por 5 minutos
     },
   },
+  socialProviders: {
+    google: {
+      clientId: env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: env.GOOGLE_CLIENT_SECRET ?? "",
+      enabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+    },
+  },
   emailAndPassword: {
     enabled: true,
     sendResetPassword: async ({ user, url }) => {
-      if (process.env.NODE_ENV !== "production") {
+      if (env.NODE_ENV !== "production") {
         console.log(`[dev] Reset de senha para ${user.email}: ${url}`);
       }
       // TODO: configurar provider de email (Resend, SendGrid, etc.) para produção
@@ -27,7 +35,8 @@ export const auth = betterAuth({
     additionalFields: {
       tipo_usuario: {
         type: "string",
-        required: true,
+        required: false,
+        defaultValue: "",
         input: true,
       },
       telefone: {
@@ -57,5 +66,5 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:3000"],
+  trustedOrigins: env.CORS_ORIGIN.split(","),
 });
