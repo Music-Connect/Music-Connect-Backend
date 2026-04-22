@@ -151,6 +151,7 @@ model Proposta {
   mensagem_resposta   String?
   created_at          DateTime       @default(now())
   updated_at          DateTime       @updatedAt
+  deleted_at          DateTime?
 
   contratante User @relation("Contratante", fields: [id_contratante], references: [id], onDelete: Cascade)
   artista     User @relation("Artista", fields: [id_artista], references: [id], onDelete: Cascade)
@@ -160,6 +161,7 @@ model Proposta {
   @@index([status])
   @@index([data_evento])
   @@map("propostas")
+  @@index([deleted_at])
 }
 
 model Avaliacao {
