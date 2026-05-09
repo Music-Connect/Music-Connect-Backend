@@ -463,6 +463,39 @@ fastify.get('/rota-protegida', { preHandler: authenticate }, handler)
 - Sessão expira em **30 dias**
 - Cookie é renovado **diariamente**
 - Cache local de **5 minutos**
+- **Política de senha**: mínimo 8 caracteres, máximo 128 (`minPasswordLength`/`maxPasswordLength`)
+- **Rate-limit**: 5 req/min/IP+email em rotas sensíveis (`sign-in`, `sign-up`, `forget-password`, `reset-password`); 20 req/min nas demais `/api/auth/*`
+
+### 5.5.1 Hardening de produção
+
+O backend valida no startup (em `NODE_ENV=production`) e recusa subir se:
+
+- `BETTER_AUTH_SECRET` ainda contém o valor padrão do `.env.example` (gere um novo com `openssl rand -base64 48`).
+- `CORS_ORIGIN` contém `*`.
+- `BETTER_AUTH_URL` usa `http://` em domínio não-localhost (deve ser HTTPS).
+
+Plugins de segurança ativos:
+
+- `@fastify/helmet` — security headers (CSP ativo só em produção).
+- `@fastify/rate-limit` — 100 req/min global + limites específicos em auth.
+- `@fastify/cors` — allowlist via `CORS_ORIGIN`.
+- Hook `onSend` expõe `x-request-id` em toda resposta para correlação de logs.
+
+### 5.5.2 Health check
+
+`GET /health` retorna estado da aplicação:
+
+```json
+{
+  "status": "ok",
+  "versao": "1.0.0",
+  "ambiente": "development",
+  "timestamp": "2026-05-09T10:00:00.000Z",
+  "banco": { "status": "ok", "latencia_ms": 4 }
+}
+```
+
+Usado por load balancers e monitoring (Railway, Sentry uptime, etc.).
 
 ### 5.6 Validação com Zod
 

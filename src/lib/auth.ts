@@ -24,6 +24,8 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
+    minPasswordLength: 8,
+    maxPasswordLength: 128,
     sendResetPassword: async ({ user, url }) => {
       if (env.NODE_ENV !== "production") {
         console.log(`[dev] Reset de senha para ${user.email}: ${url}`);

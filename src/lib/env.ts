@@ -20,6 +20,8 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().optional(),
 });
 
+const DEFAULT_SECRET_FRAGMENT = "seu_segredo_super_secreto";
+
 function validateEnv() {
   const result = envSchema.safeParse(process.env);
 
@@ -31,7 +33,26 @@ function validateEnv() {
     process.exit(1);
   }
 
-  return result.data;
+  const data = result.data;
+
+  if (data.NODE_ENV === "production") {
+    if (data.BETTER_AUTH_SECRET.includes(DEFAULT_SECRET_FRAGMENT)) {
+      console.error(
+        "❌ BETTER_AUTH_SECRET ainda está com o valor padrão do .env.example. Gere um valor único para produção (ex: `openssl rand -base64 48`)."
+      );
+      process.exit(1);
+    }
+    if (data.CORS_ORIGIN.split(",").some((o) => o.trim() === "*")) {
+      console.error("❌ CORS_ORIGIN não pode incluir '*' em produção.");
+      process.exit(1);
+    }
+    if (data.BETTER_AUTH_URL.startsWith("http://") && !data.BETTER_AUTH_URL.includes("localhost")) {
+      console.error("❌ BETTER_AUTH_URL deve usar HTTPS em produção.");
+      process.exit(1);
+    }
+  }
+
+  return data;
 }
 
 export const env = validateEnv();

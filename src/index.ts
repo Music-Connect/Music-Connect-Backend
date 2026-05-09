@@ -2,6 +2,7 @@ import "dotenv/config";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
@@ -30,6 +31,13 @@ const app = Fastify({
   },
   genReqId: () => crypto.randomUUID(),
   requestIdHeader: "x-request-id",
+});
+
+await app.register(helmet, {
+  contentSecurityPolicy: env.NODE_ENV === "production"
+    ? undefined
+    : false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
 });
 
 await app.register(multipart, {
@@ -108,9 +116,30 @@ app.get("/health", async () => {
 //   POST /api/auth/forget-password (esqueci a senha)
 //   POST /api/auth/reset-password  (redefinir senha)
 //   GET  /api/auth/session         (sessão atual)
+// Rate-limit dinâmico: 5/min em rotas sensíveis (sign-in, sign-up, forget-password,
+// reset-password) por IP+email para evitar brute-force; 20/min nas demais rotas /api/auth/*
+const SENSITIVE_AUTH_PATHS = [
+  "/api/auth/sign-in/email",
+  "/api/auth/sign-up/email",
+  "/api/auth/forget-password",
+  "/api/auth/reset-password",
+];
+
 app.all(
   "/api/auth/*",
-  { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+  {
+    config: {
+      rateLimit: {
+        max: (request) =>
+          SENSITIVE_AUTH_PATHS.some((p) => request.url.startsWith(p)) ? 5 : 20,
+        timeWindow: "1 minute",
+        keyGenerator: (request) => {
+          const body = (request.body ?? {}) as { email?: string };
+          return body.email ? `${request.ip}:${body.email}` : request.ip;
+        },
+      },
+    },
+  },
   async (request, reply) => {
     const host = request.headers.host || `localhost:${env.PORT}`;
     const url = `http://${host}${request.url}`;
