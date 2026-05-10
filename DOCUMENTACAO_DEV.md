@@ -308,6 +308,7 @@ Music-Connect-Backend/
 | GET | `/api/auth/session` | Opcional | Retorna sessão atual |
 | POST | `/api/auth/forget-password` | Não | Envia email de reset |
 | POST | `/api/auth/reset-password` | Não | Reseta senha com token |
+| POST | `/api/auth/change-password` | Sim | Altera senha do usuário logado (exige `currentPassword`). Aceita `revokeOtherSessions: true` para encerrar outras sessões. |
 
 **Body de cadastro:**
 ```json
