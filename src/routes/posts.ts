@@ -484,10 +484,15 @@ export async function postsRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const { cursor, limit } = cursorPaginationSchema.parse(req.query);
 
+      // Soft delete: comentários "[excluído]" continuam visíveis para preservar threads.
+      // O `conteudo` já foi substituído na rota DELETE; aqui só listamos.
       const comentarios = await prisma.comentario.findMany({
         take: limit + 1,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        where: { id_post: req.params.id, id_comentario_pai: null },
+        where: {
+          id_post: req.params.id,
+          id_comentario_pai: null,
+        },
         orderBy: { created_at: "desc" },
         include: {
           autor: { select: autorSelect },
@@ -565,7 +570,7 @@ export async function postsRoutes(app: FastifyInstance) {
         const pai = await prisma.comentario.findUnique({
           where: { id: body.data.id_comentario_pai },
         });
-        if (!pai || pai.id_post !== req.params.id) {
+        if (!pai || pai.id_post !== req.params.id || pai.deleted_at) {
           return reply
             .status(400)
             .send({ success: false, error: "Comentário pai inválido" });
@@ -592,7 +597,7 @@ export async function postsRoutes(app: FastifyInstance) {
     },
   );
 
-  // ── Deletar comentário ──
+  // ── Deletar comentário (Soft Delete) ──
   app.delete<{ Params: { id: string; comentarioId: string } }>(
     "/:id/comentarios/:comentarioId",
     { preHandler: authenticate },
@@ -600,7 +605,7 @@ export async function postsRoutes(app: FastifyInstance) {
       const comentario = await prisma.comentario.findUnique({
         where: { id: req.params.comentarioId },
       });
-      if (!comentario || comentario.id_post !== req.params.id) {
+      if (!comentario || comentario.id_post !== req.params.id || comentario.deleted_at) {
         return reply
           .status(404)
           .send({ success: false, error: "Comentário não encontrado" });
@@ -611,20 +616,19 @@ export async function postsRoutes(app: FastifyInstance) {
           .send({ success: false, error: "Sem permissão" });
       }
 
-      // Contar respostas para decrementar corretamente
-      const respostasCount = await prisma.comentario.count({
-        where: { id_comentario_pai: comentario.id },
-      });
-
+      // Mantém o nó na thread (para preservar as respostas filhas) mas oculta o conteúdo.
       await prisma.$transaction([
-        prisma.comentario.delete({ where: { id: comentario.id } }),
+        prisma.comentario.update({
+          where: { id: comentario.id },
+          data: { conteudo: "[excluído]", deleted_at: new Date() },
+        }),
         prisma.post.update({
           where: { id: req.params.id },
-          data: { comentarios_count: { decrement: 1 + respostasCount } },
+          data: { comentarios_count: { decrement: 1 } },
         }),
       ]);
 
-      return reply.send({ success: true, message: "Comentário deletado" });
+      return reply.send({ success: true, message: "Comentário excluído" });
     },
   );
 }

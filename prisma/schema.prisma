@@ -151,6 +151,7 @@ model Proposta {
   mensagem_resposta   String?
   created_at          DateTime       @default(now())
   updated_at          DateTime       @updatedAt
+  deleted_at          DateTime?
 
   contratante User @relation("Contratante", fields: [id_contratante], references: [id], onDelete: Cascade)
   artista     User @relation("Artista", fields: [id_artista], references: [id], onDelete: Cascade)
@@ -159,6 +160,7 @@ model Proposta {
   @@index([id_artista])
   @@index([status])
   @@index([data_evento])
+  @@index([deleted_at])
   @@map("propostas")
 }
 
@@ -251,6 +253,7 @@ model Comentario {
   conteudo          String
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
+  deleted_at        DateTime?
 
   autor          User         @relation("ComentariosDoUsuario", fields: [id_autor], references: [id], onDelete: Cascade)
   post           Post         @relation(fields: [id_post], references: [id], onDelete: Cascade)
@@ -260,6 +263,7 @@ model Comentario {
   @@index([id_post, created_at(sort: Desc)])
   @@index([id_autor])
   @@index([id_comentario_pai])
+  @@index([deleted_at])
   @@map("comentarios")
 }
 

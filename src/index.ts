@@ -10,6 +10,7 @@ import path from "path";
 import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
 import { auth } from "./lib/auth.js";
+import { startStoriesCleanup } from "./jobs/stories-cleanup.js";
 import { usuariosRoutes } from "./routes/usuarios.js";
 import { artistasRoutes } from "./routes/artistas.js";
 import { propostasRoutes } from "./routes/propostas.js";
@@ -203,6 +204,14 @@ const start = async () => {
   try {
     await prisma.$connect();
     await app.listen({ port: env.PORT, host: "0.0.0.0" });
+
+    // Background jobs (cron) — só em prod e dev (skip em test).
+    if (env.NODE_ENV !== "test") {
+      const storiesCleanup = startStoriesCleanup(app.log);
+      app.addHook("onClose", async () => storiesCleanup.stop());
+      app.log.info("[cron] stories-cleanup agendado para rodar a cada hora (minuto :05)");
+    }
+
     console.log(`✅ Backend rodando em http://localhost:${env.PORT}`);
   } catch (err) {
     app.log.error(err);

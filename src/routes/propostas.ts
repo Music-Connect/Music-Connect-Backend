@@ -13,15 +13,17 @@ export async function propostasRoutes(app: FastifyInstance) {
   app.get("/recebidas", { preHandler: authenticate }, async (req, reply) => {
     const { page, limit } = paginationSchema.parse(req.query);
 
+    const where = { id_artista: req.user!.id, deleted_at: null };
+
     const [propostas, total] = await Promise.all([
       prisma.proposta.findMany({
-        where: { id_artista: req.user!.id },
+        where,
         include: propostaInclude,
         orderBy: { created_at: "desc" },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.proposta.count({ where: { id_artista: req.user!.id } }),
+      prisma.proposta.count({ where }),
     ]);
 
     return reply.send({ success: true, data: propostas, meta: { total, page, limit } });
@@ -31,15 +33,17 @@ export async function propostasRoutes(app: FastifyInstance) {
   app.get("/enviadas", { preHandler: authenticate }, async (req, reply) => {
     const { page, limit } = paginationSchema.parse(req.query);
 
+    const where = { id_contratante: req.user!.id, deleted_at: null };
+
     const [propostas, total] = await Promise.all([
       prisma.proposta.findMany({
-        where: { id_contratante: req.user!.id },
+        where,
         include: propostaInclude,
         orderBy: { created_at: "desc" },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.proposta.count({ where: { id_contratante: req.user!.id } }),
+      prisma.proposta.count({ where }),
     ]);
 
     return reply.send({ success: true, data: propostas, meta: { total, page, limit } });
@@ -53,6 +57,7 @@ export async function propostasRoutes(app: FastifyInstance) {
     const proposta = await prisma.proposta.findFirst({
       where: {
         id_proposta: id,
+        deleted_at: null,
         OR: [{ id_artista: req.user!.id }, { id_contratante: req.user!.id }],
       },
       include: propostaInclude,
@@ -106,7 +111,9 @@ export async function propostasRoutes(app: FastifyInstance) {
     }
 
     const proposta = await prisma.proposta.findUnique({ where: { id_proposta: id } });
-    if (!proposta) return reply.status(404).send({ success: false, error: "Proposta não encontrada" });
+    if (!proposta || proposta.deleted_at) {
+      return reply.status(404).send({ success: false, error: "Proposta não encontrada" });
+    }
 
     if (proposta.id_artista !== req.user!.id) {
       return reply.status(403).send({ success: false, error: "Apenas o artista pode aceitar ou recusar propostas" });
@@ -119,5 +126,27 @@ export async function propostasRoutes(app: FastifyInstance) {
     });
 
     return reply.send({ success: true, data: updated });
+  });
+
+  // DELETE /api/propostas/:id — soft delete (qualquer parte da proposta pode excluir)
+  app.delete<{ Params: { id: string } }>("/:id", { preHandler: authenticate }, async (req, reply) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return reply.status(400).send({ success: false, error: "ID inválido" });
+
+    const proposta = await prisma.proposta.findUnique({ where: { id_proposta: id } });
+    if (!proposta || proposta.deleted_at) {
+      return reply.status(404).send({ success: false, error: "Proposta não encontrada" });
+    }
+
+    if (proposta.id_artista !== req.user!.id && proposta.id_contratante !== req.user!.id) {
+      return reply.status(403).send({ success: false, error: "Sem permissão para excluir esta proposta" });
+    }
+
+    await prisma.proposta.update({
+      where: { id_proposta: id },
+      data: { deleted_at: new Date() },
+    });
+
+    return reply.send({ success: true, message: "Proposta excluída" });
   });
 }

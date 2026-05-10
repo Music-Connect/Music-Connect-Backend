@@ -351,6 +351,7 @@ Music-Connect-Backend/
 | GET | `/:id` | Sim | Detalhes da proposta |
 | POST | `/` | Sim | Criar nova proposta |
 | PUT | `/:id/status` | Sim (artista) | Aceitar/recusar/cancelar proposta |
+| DELETE | `/:id` | Sim (artista ou contratante) | **Soft delete** — marca `deleted_at`. Proposta some das listagens mas continua no banco para auditoria. |
 
 **Body de criação:**
 ```json
@@ -407,7 +408,7 @@ Music-Connect-Backend/
 | GET | `/:id/comentarios` | Não | `cursor, limit` | Comentários do post |
 | GET | `/:id/comentarios/:cid/respostas` | Não | `cursor, limit` | Respostas a um comentário |
 | POST | `/:id/comentarios` | Sim | — | Adicionar comentário |
-| DELETE | `/:id/comentarios/:cid` | Sim (autor) | — | Deletar comentário |
+| DELETE | `/:id/comentarios/:cid` | Sim (autor) | — | **Soft delete** — substitui `conteudo` por `"[excluído]"` e marca `deleted_at`. Mantém o nó na thread para preservar respostas. |
 
 **Body de criação de post:**
 ```json
@@ -516,7 +517,25 @@ Todas as entradas são validadas em `src/lib/schemas.ts`:
 | `feedQuerySchema` | Filtros do feed (cursor, tipo, genero...) |
 | `cursorPaginationSchema` | Paginação cursor |
 
-### 5.7 Docker
+### 5.7 Soft Delete & Background Jobs
+
+**Soft delete** ativo em: `Post`, `Comentario`, `Proposta` — campo `deleted_at: DateTime?` + `@@index([deleted_at])`.
+
+| Modelo | Comportamento ao "deletar" |
+|---|---|
+| `Post` | `deleted_at = NOW()`. Listagens filtram `deleted_at: null`. |
+| `Comentario` | `deleted_at = NOW()` + `conteudo = "[excluído]"`. **Nó continua na thread** (preserva respostas filhas). Listagens não filtram `deleted_at` por design. |
+| `Proposta` | `deleted_at = NOW()`. Listagens filtram `deleted_at: null`. DELETE permitido tanto pelo artista quanto pelo contratante. |
+
+**Stories** usam **hard delete** (efêmero por design). Limpeza automática via cron job `stories-cleanup`:
+
+- Roda a cada hora no minuto `:05` (cron `5 * * * *`).
+- Implementado com [`croner`](https://github.com/Hexagon/croner) em `src/jobs/stories-cleanup.ts`.
+- `protect: true` evita execuções sobrepostas; `catch` direciona exceções para o logger Fastify.
+- Desabilitado em `NODE_ENV=test`.
+- Pode ser invocado manualmente via `runStoriesCleanup()` para tests/migrations.
+
+### 5.8 Docker
 
 **`docker-compose.yml`** sobe dois serviços:
 
