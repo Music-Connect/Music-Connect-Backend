@@ -69,8 +69,8 @@ export const createAvaliacaoSchema = z.object({
 });
 
 export const paginationSchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(20),
+  page: z.coerce.number().int().positive().catch(1),
+  limit: z.coerce.number().int().positive().max(100).catch(20),
 });
 
 // ── Feed System ──

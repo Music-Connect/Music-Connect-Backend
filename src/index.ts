@@ -203,7 +203,6 @@ await app.register(uploadsRoutes, { prefix: "/api/uploads" });
 const start = async () => {
   try {
     await prisma.$connect();
-    await app.listen({ port: env.PORT, host: "0.0.0.0" });
 
     // Background jobs (cron) — só em prod e dev (skip em test).
     if (env.NODE_ENV !== "test") {
@@ -211,6 +210,8 @@ const start = async () => {
       app.addHook("onClose", async () => storiesCleanup.stop());
       app.log.info("[cron] stories-cleanup agendado para rodar a cada hora (minuto :05)");
     }
+
+    await app.listen({ port: env.PORT, host: "0.0.0.0" });
 
     console.log(`✅ Backend rodando em http://localhost:${env.PORT}`);
   } catch (err) {
