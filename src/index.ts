@@ -28,6 +28,7 @@ import { searchRoutes } from "./routes/search.js";
 import { analyticsRoutes } from "./routes/analytics.js";
 
 const app = Fastify({
+  trustProxy: true,
   logger: {
     level: env.LOG_LEVEL,
     ...(env.NODE_ENV === "development" && {
