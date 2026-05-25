@@ -3,6 +3,8 @@ import { authenticate } from "../middleware/auth.js";
 import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
+import { v2 as cloudinary } from "cloudinary";
+import { env } from "../lib/env.js";
 
 const UPLOAD_DIR = path.resolve("public/uploads");
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -42,6 +44,44 @@ export async function uploadsRoutes(app: FastifyInstance) {
         });
       }
 
+      // ── Cloudinary Upload (Production) ──
+      if (
+        env.CLOUDINARY_CLOUD_NAME &&
+        env.CLOUDINARY_API_KEY &&
+        env.CLOUDINARY_API_SECRET
+      ) {
+        cloudinary.config({
+          cloud_name: env.CLOUDINARY_CLOUD_NAME,
+          api_key: env.CLOUDINARY_API_KEY,
+          api_secret: env.CLOUDINARY_API_SECRET,
+        });
+
+        try {
+          const uploadResult = await new Promise<any>((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+              { folder: "music-connect" },
+              (error, result) => {
+                if (error) return reject(error);
+                resolve(result);
+              }
+            );
+            uploadStream.end(buffer);
+          });
+
+          return reply.status(201).send({
+            success: true,
+            data: { url: uploadResult.secure_url },
+          });
+        } catch (error) {
+          req.log.error(error, "Cloudinary upload failed");
+          return reply.status(500).send({
+            success: false,
+            error: "Falha ao enviar arquivo para a nuvem",
+          });
+        }
+      }
+
+      // ── Local File System Upload (Development Fallback) ──
       const ext = data.mimetype === "image/png" ? "png" : data.mimetype === "image/webp" ? "webp" : "jpg";
       const filename = `${crypto.randomUUID()}.${ext}`;
       const filepath = path.join(UPLOAD_DIR, filename);
