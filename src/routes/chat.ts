@@ -43,6 +43,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
           { users: { some: { id: participantId } } },
         ],
       },
+      include: {
+        users: { select: { id: true, name: true, image: true, tipo_usuario: true } },
+      },
     });
 
     if (!conversation) {
@@ -50,6 +53,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       conversation = await prisma.conversation.create({
         data: {
           users: { connect: [{ id: userId }, { id: participantId }] },
+        },
+        include: {
+          users: { select: { id: true, name: true, image: true, tipo_usuario: true } },
         },
       });
     }
