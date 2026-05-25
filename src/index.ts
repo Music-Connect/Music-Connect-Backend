@@ -6,6 +6,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
+import websocket from "@fastify/websocket";
 import path from "path";
 import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
@@ -19,6 +20,12 @@ import { postsRoutes } from "./routes/posts.js";
 import { storiesRoutes } from "./routes/stories.js";
 import { recomendacoesRoutes } from "./routes/recomendacoes.js";
 import { uploadsRoutes } from "./routes/uploads.js";
+import { chatRoutes } from "./routes/chat.js";
+import { notificationsRoutes } from "./routes/notifications.js";
+import { wsRoutes } from "./routes/ws.js";
+import { followsRoutes } from "./routes/follows.js";
+import { searchRoutes } from "./routes/search.js";
+import { analyticsRoutes } from "./routes/analytics.js";
 
 const app = Fastify({
   logger: {
@@ -58,6 +65,10 @@ await app.register(cors, {
 });
 
 await app.register(cookie);
+
+await app.register(websocket, {
+  options: { maxPayload: 1048576 } // 1MB
+});
 
 // Rate Limit global
 await app.register(rateLimit, {
@@ -199,6 +210,14 @@ await app.register(postsRoutes, { prefix: "/api/posts" });
 await app.register(storiesRoutes, { prefix: "/api/stories" });
 await app.register(recomendacoesRoutes, { prefix: "/api/recomendacoes" });
 await app.register(uploadsRoutes, { prefix: "/api/uploads" });
+
+await app.register(chatRoutes, { prefix: "/api/chat" });
+await app.register(notificationsRoutes, { prefix: "/api/notifications" });
+await app.register(wsRoutes, { prefix: "/api/ws" });
+
+await app.register(followsRoutes, { prefix: "/api/usuarios" }); // Fica junto de usuarios: /api/usuarios/:id/follow
+await app.register(searchRoutes, { prefix: "/api/search" });
+await app.register(analyticsRoutes, { prefix: "/api/analytics" });
 
 const start = async () => {
   try {
